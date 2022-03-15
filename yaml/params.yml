@@ -1,0 +1,52 @@
+env:
+  render: True
+  workspace:
+    walls: False
+    pos: [-0.614, 0, 0]
+    quat:
+      w: 0.7071232
+      x: 0.0
+      y: 0.0
+      z: 0.707904
+    size: [0.5, 0.5]
+  camera:
+    pos: [0.0, 0.0, 0.6]
+    target_pos: [.0, 0.0, 0.0]
+    up_vector: [0.0, 1.0, 0.0]
+    intrinsics:
+      fx: 463
+      fy: 463
+      cx: 320
+      cy: 240
+      width: 640
+      height: 480
+  scene_generation:
+    nr_of_obstacles:
+      - 8
+      - 13
+    hug:
+      probability: 1  # Probability of hugging
+      radius: 0.2  # radius within the object lies
+    object_type: 'toyblocks'  # 'boxes' or 'toyblocks'
+
+mdp:
+  singulation_distance: 0.03
+  push:
+    distance: [ 0.02, 0.10 ]
+    predict_collision: True
+    obstacle_avoid: True
+
+agent:
+  param: 0.0
+  learning_rate: 0.0001
+  batch_size: 4
+  replay_buffer_size: 1000000
+  update_target_net: 500
+  tau: 0.999
+  discount: 0.5
+  double_q_learning: False
+  epsilon_start: 0.9
+  epsilon_end: 0.05
+  epsilon_decay: 100000  # number of learning steps for half epsilon, set to 0 if no decay is needed
+  device: 'cuda'
+  push_target_prob: 0.5  #Probability for pushing the target during exploration
