@@ -22,6 +22,7 @@ pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f ht
 This demo runs our pre-trained model with a UR5 robot arm in simulation on an environment with 8-13 objects. The objective is to singulate the target object (red one) from its surrounding clutter by reaching the target goal. Note that the goal is illustrated with a black circle. The video on the visualizes the L-Hybrid (local) policy while on the right the G-Hybrid (global) policy.
 
 ### Instructions 
+Download the pretrained models:
 ```commandline
 
 ```
@@ -30,6 +31,16 @@ This demo runs our pre-trained model with a UR5 robot arm in simulation on an en
 
 ## Training
 To train the hybrid pushing policy from scratch with random goals in simulation run the following command:
+```commandline
+python run.py --exp_name hybrid --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
+```
+
+To train without the goal run the following command:
+```commandline
+python run.py --exp_name rl --goal False --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
+```
+
+For training in the environment with the walls:
 ```commandline
 
 ```
