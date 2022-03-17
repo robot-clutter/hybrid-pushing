@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 from hpp.core import MDP
 from hpp.util.math import get_distance_of_two_bbox, min_max_scale
+from hpp.util.cv_tools import PinholeCameraIntrinsics, Feature
+from hpp.util.pybullet import get_camera_pose
+from hpp import CROP_TABLE, SURFACE_SIZE
 
 import numpy as np
 import cv2
@@ -131,8 +134,8 @@ class PushEverywhere(MDP):
         self.goal = None
         self.goal_pos = np.zeros((2,))
 
-        self.random_goal = False
-        self.local = True
+        self.random_goal = True
+        self.local = False
         self.singulation_distance = 0.03
 
     def reset_goal(self, obs):
@@ -156,9 +159,10 @@ class PushEverywhere(MDP):
         self.set_goal(goal_centroid, obs)
 
     def set_goal(self, pxl, obs):
-        '''
+        """
             pxl: goal position (x, y)
-        '''
+        """
+
         fused_map = self.state_representation(obs)[1]
         target_mask = np.zeros(fused_map.shape).astype(np.uint8)
         target_mask[fused_map == 255] = 255
@@ -189,13 +193,11 @@ class PushEverywhere(MDP):
         positional_map[positional_map < 0] = 0
 
         self.goal = positional_map.copy()
-        # plt.imshow(self.goal)
-        # plt.show()
 
-        self.goal_pos[0] = clt.min_max_scale(goal_centroid[0], (0, self.crop_table[0]),
-                                             (-clt.SURFACE_SIZE, clt.SURFACE_SIZE))
-        self.goal_pos[1] = -clt.min_max_scale(goal_centroid[1], (0, self.crop_table[1]),
-                                              (-clt.SURFACE_SIZE, clt.SURFACE_SIZE))
+        self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]),
+                                             (-SURFACE_SIZE, SURFACE_SIZE))
+        self.goal_pos[1] = -min_max_scale(goal_centroid[1], (0, self.crop_table[1]),
+                                              (-SURFACE_SIZE, SURFACE_SIZE))
 
     def compute_free_space(self, obs):
         # Compute free space map
@@ -204,8 +206,6 @@ class PushEverywhere(MDP):
         obstacles_map[fused_map == 122] = 255
         obstacles_map[fused_map == 255] = 255
         free_space_map = compute_free_space_map(obstacles_map)
-        # plt.imshow(free_space_map)
-        # plt.show()
 
         # Calculate position of target
         centroid_yx = np.mean(np.argwhere(fused_map == 255), axis=0)
@@ -213,15 +213,12 @@ class PushEverywhere(MDP):
 
         if self.local:
             initial_shape = free_space_map.shape
-            free_space_map = clt.Feature(free_space_map).translate(centroid[0], centroid[1])
+            free_space_map = Feature(free_space_map).translate(centroid[0], centroid[1])
             crop = int(free_space_map.array().shape[0] * 0.25)
             free_space_map = free_space_map.crop(crop, crop)
             free_space_map = free_space_map.increase_canvas_size(int(initial_shape[0]), int(initial_shape[1]))
             free_space_map = free_space_map.translate(centroid[0], centroid[1], inverse=True)
             free_space_map = free_space_map.array()
-
-        # plt.imshow(free_space_map)
-        # plt.show()
 
         # Compute optimal positions
         argmaxes = np.squeeze(np.where(free_space_map > 0.9 * free_space_map.max()))
@@ -244,13 +241,13 @@ class PushEverywhere(MDP):
         heightmap = get_heightmap(obs)
         heightmap[heightmap < 0] = 0  # Set negatives (everything below table) the same as the table in order to
                                       # properly translate it
-        heightmap = Feature(heightmap).crop(clt.CROP_TABLE, clt.CROP_TABLE).array()
+        heightmap = Feature(heightmap).crop(CROP_TABLE, CROP_TABLE).array()
         heightmap = cv2.resize(heightmap, (100, 100), interpolation=cv2.INTER_NEAREST)
 
         mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
         target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
         mask[seg == target_id] = 255
-        mask = Feature(mask).crop(clt.CROP_TABLE, clt.CROP_TABLE).array()
+        mask = Feature(mask).crop(CROP_TABLE, CROP_TABLE).array()
         mask = cv2.resize(mask, (100, 100), interpolation=cv2.INTER_NEAREST)
 
         fused_heightmap = np.zeros((heightmap.shape[0], heightmap.shape[1], 1), dtype=np.uint8)
@@ -293,20 +290,6 @@ class PushEverywhere(MDP):
         target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
         if target.pos[2] < 0:
             return True
-
-        # current_fallen = []
-        # for obj in obs['full_state']['objects']:
-        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
-        #         current_fallen.append(obj.name)
-        #
-        # next_fallen = []
-        # for obj in next_obs['full_state']['objects']:
-        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
-        #         next_fallen.append(obj.name)
-        #
-        # if len(next_fallen) > len(current_fallen):
-        #     return True
-
         return False
 
     def empty(self, obs, next_obs, eps=0.005):
@@ -327,21 +310,13 @@ class PushEverywhere(MDP):
     def empty_around_target(self, obs, next_obs, epsilon):
         fused_map = self.state_representation(obs)[1].squeeze()
         centroid = np.mean(np.argwhere(fused_map == 255), axis=0)
-        mask = clt.Feature(fused_map).translate(centroid[0], centroid[1]).crop(20, 20).array()
+        mask = Feature(fused_map).translate(centroid[0], centroid[1]).crop(20, 20).array()
         mask[mask == 255] = 0
 
         next_fused_map = self.state_representation(next_obs)[1].squeeze()
         next_centroid = np.mean(np.argwhere(next_fused_map == 255), axis=0)
-        next_mask = clt.Feature(next_fused_map).translate(next_centroid[0], next_centroid[1]).crop(20, 20).array()
+        next_mask = Feature(next_fused_map).translate(next_centroid[0], next_centroid[1]).crop(20, 20).array()
         next_mask[next_mask == 255] = 0
-
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(1, 3)
-        # ax[0].imshow(mask)
-        # ax[1].imshow(next_mask)
-        # ax[2].imshow(mask - next_mask)
-        # ax[2].set_title(np.count_nonzero(mask - next_mask))
-        # plt.show()
 
         if np.linalg.norm(centroid - next_centroid) > 5 or np.count_nonzero(mask - next_mask) > epsilon:
             return False
@@ -352,11 +327,6 @@ class PushEverywhere(MDP):
         depth_heigthmap, seg, goal = self.state_representation(obs)
         h, w = depth_heigthmap.shape
 
-        # import matplotlib.pyplot as plt
-        # plt.imshow(depth_heigthmap)
-        # plt.plot(action[0], action[1], 'o')
-        # plt.show()
-
         nr_rotations = 16
 
         x = action[0]
@@ -364,19 +334,11 @@ class PushEverywhere(MDP):
         theta = (2 * np.pi / nr_rotations) * action[2]
 
         print("x: {}, y: {}, theta: {}".format(x, y, (180 * theta / np.pi)))
-        augmented_workspace_limit = (np.abs(self.workspace_limits[0][0]) / 193) * clt.CROP_TABLE
+        augmented_workspace_limit = (np.abs(self.workspace_limits[0][0]) / 193) * CROP_TABLE
         x1 = min_max_scale(x, range=(0, w), target_range=(-augmented_workspace_limit, augmented_workspace_limit))
         y1 = -min_max_scale(y, range=(0, h), target_range=(-augmented_workspace_limit, augmented_workspace_limit))
         p1 = np.array([x1, y1, depth_heigthmap[y, x] + 0.01])
         print(p1)
-
-        # target_mask, target_mask_centroid = self.get_mask_and_centroid(obs)
-        # goal_centroid = np.argwhere(goal == 0)[0]
-        # dist_pxl = np.linalg.norm(goal_centroid - target_mask_centroid)
-        # push_distance = dist_pxl * 0.0012
-        # push_distance = min(0.02, max(push_distance, 0.1))
-        # print('push_distance:', push_distance)
-        # input('')
 
         push_distance = 0.15
         direction = np.array([np.cos(theta), np.sin(theta), 0])
@@ -406,14 +368,6 @@ class PushEverywhere(MDP):
             if target_mask_pxls == 0:
                 return 0.0
             overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
-            # print('IoU:', overlay_ratio)
-            #
-            # fig, ax = plt.subplots(1, 4)
-            # ax[0].imshow(fused_map)
-            # ax[1].imshow(self.goal)
-            # ax[2].imshow(target_mask)
-            # ax[3].imshow(overlay)
-            # plt.show()
 
             return overlay_ratio
 
@@ -430,14 +384,11 @@ class PushEverywhere(MDP):
         obstacles_in_singulation_area[obstacles_in_singulation_area > singulation_area_pxl] = 0.0
         pxls_in_singulation_area = np.argwhere(obstacles_in_singulation_area > 0)
 
-        # if (len(pxls_in_singulation_area) == 0) and (dist < 0.02):
-        #     return True
         if (len(pxls_in_singulation_area) == 0) and (iou > 0.9):
             return True
         return False
 
     def reward(self, obs, next_obs, action):
-        # return -1
 
         def get_obstacle_pxls_in_singulation_area(obs):
 
@@ -450,19 +401,13 @@ class PushEverywhere(MDP):
             obstacles_in_singulation_area[obstacles_in_singulation_area > singulation_area_pxl] = 0.0
             obstacles_in_singulation_area[obstacles_in_singulation_area > 0.0] = 1.0
 
-            seg = Feature(obs['seg']).crop(clt.CROP_TABLE, clt.CROP_TABLE).array()
+            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
             seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
             no_of_objects_in_sing_area = np.unique((obstacles_in_singulation_area * seg).astype(np.uint8))
             return len(no_of_objects_in_sing_area)
 
-
         if self.fallen(obs, next_obs):
             return 0
-
-        # diff_overlay = get_overlay(next_obs) - get_overlay(obs)
-        # print('diff_overlay:', diff_overlay)
-        # if diff_overlay > 0.0:
-        #     return +0.5
 
         target_pos = next(x.pos for x in obs['full_state']['objects'] if x.name == 'target')
         target_pos_n = next(x.pos for x in next_obs['full_state']['objects'] if x.name == 'target')
@@ -490,7 +435,7 @@ class PushEverywhere(MDP):
 
         mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
         mask[seg == target.body_id] = 255
-        mask = Feature(mask).crop(clt.CROP_TABLE, clt.CROP_TABLE).array()
+        mask = Feature(mask).crop(CROP_TABLE, CROP_TABLE).array()
 
         if (mask == 0).all() or target.pos[2] < 0:
             return False
@@ -498,30 +443,10 @@ class PushEverywhere(MDP):
         return True
 
 
-class PushEverywhereEval(PushEverywhere):
-    def __init__(self, params):
-        super(PushEverywhereEval, self).__init__(params)
-
-    def terminal(self, obs, next_obs):
-        rgb, depth, seg = next_obs['rgb'], next_obs['depth'], next_obs['seg']
-        target_id = next(x.body_id for x in next_obs['full_state']['objects'] if x.name == 'target')
-        mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
-        mask[seg == target_id] = 255
-        target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
-
-        if target.pos[2] < 0 or (mask == 0).all():
-            return 3
-
-        if self.empty(obs, next_obs):
-            return -1
-
-        if all(dist > self.singulation_distance for dist in get_distances_from_target(next_obs)):
-            return 2
-
-        return 0
-
-
 class PushEvereywherRLonly(PushEverywhere):
+    """
+    This class implements the mdp that corresponds to the RL policy, i.e. no goal.
+    """
     def __init__(self, params):
         super(PushEvereywherRLonly, self).__init__(params)
 
@@ -571,3 +496,29 @@ class PushEvereywherRLonly(PushEverywhere):
 
         return 0
 
+
+class PushEverywhereEval(PushEverywhere):
+    """
+    This class runs only in evaluation, since the terminal state is changed, i.e. not goal-reaching but
+    total singulation
+    """
+    def __init__(self, params):
+        super(PushEverywhereEval, self).__init__(params)
+
+    def terminal(self, obs, next_obs):
+        rgb, depth, seg = next_obs['rgb'], next_obs['depth'], next_obs['seg']
+        target_id = next(x.body_id for x in next_obs['full_state']['objects'] if x.name == 'target')
+        mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
+        mask[seg == target_id] = 255
+        target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
+
+        if target.pos[2] < 0 or (mask == 0).all():
+            return 3
+
+        if self.empty(obs, next_obs):
+            return -1
+
+        if all(dist > self.singulation_distance for dist in get_distances_from_target(next_obs)):
+            return 2
+
+        return 0

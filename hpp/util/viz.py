@@ -7,7 +7,7 @@ Vizualization tools for plotting different objects.
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from clutter.util.orientation import Quaternion, transform_points
+from hpp.util.orientation import Quaternion, transform_points
 import numpy as np
 
 

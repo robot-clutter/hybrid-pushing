@@ -40,12 +40,16 @@ To train without the goal run the following command:
 python run.py --exp_name rl --goal False --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
 ```
 
-For training in the environment with the walls:
-```commandline
+For training in the environment with the walls just run the above commands with the flag --walls True.
 
-```
 
 ## Evaluation
+To test your own trained model, simply change the location of --snapshot_file:
 ```commandline
+python run.py --is_testing --policy g-hybrid --snapsot_file 'YOUR-SNAPSHOT-FILE-HERE' --n_episodes 100 --episode_max_steps 10 --seed 1
+```
 
+To evaluate on the challenging scenes:
+```commandline
+python run.py --is_testing --policy g-hybrid --test_preset_cases  --episode_max_steps 15
 ```

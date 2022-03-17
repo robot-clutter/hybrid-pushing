@@ -21,6 +21,8 @@ env:
       width: 640
       height: 480
   scene_generation:
+    target:
+      randomize_pos: True
     nr_of_obstacles:
       - 8
       - 13
@@ -38,6 +40,7 @@ mdp:
 
 agent:
   param: 0.0
+  goal: True
   learning_rate: 0.0001
   batch_size: 4
   replay_buffer_size: 1000000

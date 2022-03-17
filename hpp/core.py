@@ -8,12 +8,11 @@ These abstract classes are useful for defining he interfaces used in this packag
 
 import copy
 import numpy as np
-from clutter.util.orientation import Quaternion, Affine3
-import clutter.util.math as clt_math
-from clutter.util.viz import plot_box, plot_frame
+from hpp.util.orientation import Quaternion, Affine3
+import hpp.util.math as clt_math
+from hpp.util.viz import plot_box, plot_frame
 import matplotlib.pyplot as plt
-from clutter.util.info import Logger
-import clutter.util.info as clt_info
+import hpp.util.info as clt_info
 import pickle
 import os
 

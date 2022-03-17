@@ -4,6 +4,7 @@ Env
 
 This module contains classes for defining an environment.
 """
+import matplotlib.pyplot as plt
 import numpy as np
 import pybullet as p
 import pybullet_data
@@ -13,9 +14,11 @@ import cv2
 import os
 
 from hpp.util.robotics import Trajectory
-from hpp.util.orientation import Quaternion, Affine3
+from hpp.util.orientation import Quaternion, Affine3, rot_z
+from hpp.util.cv_tools import PinholeCameraIntrinsics, Feature
+from hpp.util.math import min_max_scale, sample_distribution
 from hpp.core import Env, Robot, Camera, Object
-from hpp.util.cv_tools import PinholeCameraIntrinsics
+from hpp import SURFACE_SIZE
 import hpp.util.pybullet as bullet_util
 
 
@@ -40,7 +43,8 @@ class NamesButton(Button):
     def show_names(self, objects):
         if self.on() and len(self.ids) == 0:
             for obj in objects:
-                self.ids.append(p.addUserDebugText(text=obj.name, textPosition=[0, 0, 0], parentObjectUniqueId=obj.body_id))
+                self.ids.append(p.addUserDebugText(text=obj.name, textPosition=[0, 0, 0],
+                                                   parentObjectUniqueId=obj.body_id))
 
         if not self.on():
             for i in self.ids:
@@ -97,7 +101,7 @@ class UR5Bullet(Robot):
     def set_task_pose(self, pos, quat):
         link_index = bullet_util.get_link_indices([self.ee_link_name])[0]
         joints = p.calculateInverseKinematics(bodyIndex=0, endEffectorLinkIndex=link_index,
-                                              targetPosition=(pos[0], pos[1], pos[2]), 
+                                              targetPosition=(pos[0], pos[1], pos[2]),
                                               targetOrientation=quat.as_vector("xyzw"))
         self.set_joint_position(joints)
 
@@ -201,7 +205,7 @@ class BulletEnv(Env):
     Parameters
     ----------
     name : str
-        A string with the name of the environment. 
+        A string with the name of the environment.
     params : dict
         A dictionary with parameters for the environment.
     """
@@ -232,15 +236,16 @@ class BulletEnv(Env):
         self.robot = None
 
         # Load toy blocks
-        toy_blocks_root = '../assets/blocks/'
+        toyblocks_root = '../assets/blocks/'
         self.obj_files = []
-        for obj_file in os.listdir(toy_blocks_root):
+        for obj_file in os.listdir(toyblocks_root):
             if not obj_file.endswith('.obj'):
                 continue
             self.obj_files.append(os.path.join(toyblocks_root, obj_file))
+        print(self.obj_files)
 
         # Number of obstacles
-        self.nr_objects = params["scene_generation"]["nr_obstacles"]
+        self.nr_objects = params["scene_generation"]["nr_of_obstacles"]
 
         self.objects = []
 
@@ -278,7 +283,7 @@ class BulletEnv(Env):
         p.setAdditionalSearchPath("../assets")  # optionally
 
         # Load robot
-        k = p.loadURDF("ur5e_rs_fingerlong.urdf")
+        p.loadURDF("ur5e_rs_fingerlong.urdf")
 
         if self.params["workspace"]["walls"]:
             table_name = "table_walls.urdf"
@@ -343,7 +348,6 @@ class BulletEnv(Env):
         return world_pos, world_quat
 
     def seed(self, seed=None):
-        self.scene_generator.seed(seed)
         self.rng.seed(seed)
 
     def remove_body(self, idx):
@@ -352,7 +356,7 @@ class BulletEnv(Env):
         self.objects.remove(obj)
         self.scene_generator.objects.remove(obj)
 
-    def load_obj_as_urdf(self, obj_path, scaling, position, orientation, name, fixed_base=False):
+    def load_obj(self, obj_path, scaling, position, orientation, name, fixed_base=False, visual_path=None):
         if name == 'target':
             random_color = np.array([1.0, 0.0, 0.0])
         else:
@@ -408,53 +412,72 @@ class BulletEnv(Env):
         crop_size = 193
 
         def get_pxl_distance(meters):
-            return meters * crop_size / clt.SURFACE_SIZE
+            return meters * crop_size / SURFACE_SIZE
 
         def get_xyz(pxl):
-            x = clt.min_max_scale(pxl[0], range=(0, 2 * crop_size), target_range=(-0.25, 0.25))
-            y = -clt.min_max_scale(pxl[1], range=(0, 2 * crop_size), target_range=(-0.25, 0.25))
+            x = min_max_scale(pxl[0], range=(0, 2 * crop_size), target_range=(-SURFACE_SIZE, SURFACE_SIZE))
+            y = -min_max_scale(pxl[1], range=(0, 2 * crop_size), target_range=(-SURFACE_SIZE, SURFACE_SIZE))
             z = 0.02
             return np.array([x, y, z])
 
+        def sample_toy_blocks():
+            nr_of_obstacles = self.params['scene_generation']['nr_of_obstacles']
+            n_obstacles = nr_of_obstacles[0] + self.rng.randint(nr_of_obstacles[1] - nr_of_obstacles[0] + 1)
+            objects = []
+
+            for j in range(n_obstacles):
+                x = self.rng.uniform(-SURFACE_SIZE, SURFACE_SIZE)
+                y = self.rng.uniform(-SURFACE_SIZE, SURFACE_SIZE)
+
+                obj = Object(name='obs_' + str(j),
+                             pos=np.array([1.0, 1.0, 0.05]),
+                             quat=Quaternion(),
+                             obj_path=self.rng.choice(self.obj_files))
+                objects.append(obj)
+            objects[0].name = 'target'
+            return objects
+
         # Sample n objects from the database.
-        nr_objects = self.rng.randint(low=self.nr_objects[0], high=self.nr_objects[1])
-        obj_paths = self.rng.choice(self.obj_files, nr_objects)
+        objs = sample_toy_blocks()
 
-        for i in range(len(obj_paths)):
-            obj = Object(name='obs_' + str(i),
-                         pos=np.array([1.0, 1.0, 0.05]),
-                         quat=Quaternion(),
-                         obj_path=obj_paths[i])
-
-            body_id = self.load_obj(obj.obj_path, 1., obj.pos, obj.quat.as_vector("xyzw"),
-                                    visual_path=obj.obj_path, name=obj.name)
+        for obj in objs:
+            body_id = self.load_obj(obj.obj_path, 1.2, obj.pos, obj.quat.as_vector("xyzw"), name=obj.name)
             size = (np.array(p.getAABB(body_id)[1]) - np.array(p.getAABB(body_id)[0])) / 2.0
-
             p.removeBody(body_id)
 
             max_size = np.sqrt(size[0] ** 2 + size[1] ** 2)
             erode_size = int(np.round(get_pxl_distance(meters=max_size)))
             seg = self.get_obs()['seg']
-            seg = clt.Feature(seg).crop(crop_size, crop_size).array()
+            seg = Feature(seg).crop(crop_size, crop_size).array()
             free = np.zeros(seg.shape, dtype=np.uint8)
             free[seg == 1] = 1
             free[0, :], free[:, 0], free[-1, :], free[:, -1] = 0, 0, 0, 0
             free = cv2.erode(free, np.ones((erode_size, erode_size), np.uint8))
+
             if np.sum(free) == 0:
                 return
-            pixx = clt.util.math.sample_distribution(np.float32(free), rng=self.rng)
+            pixx = sample_distribution(np.float32(free), rng=self.rng)
+
+            # plt.imshow(free)
+            # print(pixx[1], pixx[0])
+            # plt.plot(pixx[1], pixx[0], 'x')
+            # plt.show()
+            # print('Prob:', free[pixx[0], pixx[1]])
+
 
             if (not self.params['scene_generation']['target'].get('randomize_pos', True)) and (obj.name == 'target'):
-                pixx = [free.shape[0] / 2, free.shape[1]/2]
+                pixx = [free.shape[0] / 2, free.shape[1] / 2]
 
             pix = np.array([pixx[1], pixx[0]])
 
             pos = get_xyz(pix)
             theta = self.rng.rand() * 2 * np.pi
-            quat = Quaternion().from_rotation_matrix(clt.util.orientation.rot_z(theta))
+            quat = Quaternion().from_rotation_matrix(rot_z(theta))
 
             pos, quat = self.workspace2world(pos=pos, quat=quat)
-            body_id = self.load_obj_as_urdf(obj.obj_path, 1.2, pos, quat.as_vector("xyzw"), name=obj.name)
+
+            body_id = self.load_obj(obj.obj_path, 1.2, pos, quat.as_vector("xyzw"),
+                                    visual_path=obj.obj_path, name=obj.name)
             self.objects.append(Object(name=obj.name, pos=pos, quat=quat, size=size, body_id=body_id))
 
     def add_challenging(self, test_preset_file):
@@ -497,17 +520,9 @@ class BulletEnv(Env):
         # Load robot and workspace
         self.load_robot_and_workspace()
 
-        # Load objects
-        hugging = self.rng.random() < self.params['scene_generation']['hug']['probability']
-
-        if self.params['scene_generation']['object_type'] == 'boxes':
-            self.add_boxes(self.scene_generator.objects)
-        elif self.params['scene_generation']['object_type'] == 'toyblocks':
-            self.add_toyblocks()
-            # self.add_challenging(self.scene_generator,
-            #                      test_preset_file='../assets/test-cases/challenging_scene_8.txt')
-        else:
-            raise AttributeError
+        self.add_toyblocks()
+        # self.add_challenging(self.scene_generator,
+        #                      test_preset_file='../assets/test-cases/challenging_scene_8.txt')
 
         t = 0
         while t < 3000:
@@ -515,14 +530,9 @@ class BulletEnv(Env):
             t += 1
 
         # Update position and orientation
-        for obj in self.objects:
-            pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
-            obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
-                                                     quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
-                                                     inv=True)
+        self.update_object_poses()
 
-        if hugging:
-            self.hug()
+        self.hug()
 
         t = 0
         while self.objects_still_moving():
@@ -550,11 +560,7 @@ class BulletEnv(Env):
             t += 1
 
         # Update position and orientation
-        for obj in self.objects:
-            pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
-            obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
-                                                     quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
-                                                     inv=True)
+        self.update_object_poses()
 
         while self.objects_still_moving():
             time.sleep(0.001)
@@ -672,11 +678,7 @@ class BulletEnv(Env):
         rgb, depth, seg = self.camera.get_data()
 
         # Update position and orientation
-        for obj in self.objects:
-            pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
-            obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
-                                                     quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
-                                                     inv=True)
+        self.update_object_poses()
 
         table = next(x for x in self.objects if x.name == 'table')
         full_state = {'objects': self.objects,
@@ -687,41 +689,31 @@ class BulletEnv(Env):
         return {'rgb': rgb, 'depth': depth, 'seg': seg, 'full_state': copy.deepcopy(full_state),
                 'collision': self.collision}
 
-    def hug(self):
+    def hug(self, force_magnitude=15, radius=0.2, duration=300):
         target = next(x for x in self.objects if x.name == 'target')
-        ids = []
-        forces = {'boxes': 20, 'toyblocks': 15}
-        force_magnitude = forces[self.params['scene_generation']['object_type']]
-        duration = 300
         t = 0
         while t < duration:
             for obj in self.objects:
-                if obj.name in ['table', 'plane']:
-                    continue
-
-                if obj.pos[2] < 0:
+                if obj.name in ['table', 'plane'] or obj.pos[2] < 0:
                     continue
 
                 if obj.name == 'target':
-                    force_magnitude = 3 * forces[self.params['scene_generation']['object_type']]
+                    obj_force_magnitude = 3 * force_magnitude
                 else:
-                    force_magnitude = forces[self.params['scene_generation']['object_type']]
+                    obj_force_magnitude = force_magnitude
 
-                pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
+                pos, _ = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
                 error = self.workspace2world(target.pos)[0] - pos
-                if np.linalg.norm(error) < self.params['scene_generation']['hug']['radius']:
+                if np.linalg.norm(error) < radius:
                     force_direction = error / np.linalg.norm(error)
                     pos_apply = np.array([pos[0], pos[1], 0])
-                    p.applyExternalForce(obj.body_id, -1, force_magnitude * force_direction, pos_apply, p.WORLD_FRAME)
+                    p.applyExternalForce(obj.body_id, -1, obj_force_magnitude * force_direction, pos_apply, p.WORLD_FRAME)
 
             p.stepSimulation()
             t += 1
 
-        for obj in self.objects:
-            pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
-            obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
-                                                     quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
-                                                     inv=True)
+        # Update objects poses
+        self.update_object_poses()
 
     def robot_set_task_pose_trajectory(self, pos, quat, duration, stop_collision=False):
         init_pos, init_quat = self.robot.get_task_pose()
@@ -755,8 +747,8 @@ class BulletEnv(Env):
             while self.button.on():
                 time.sleep(0.001)
 
-            # time.sleep(p.readUserDebugParameter(self.slider))
-            time.sleep(0.005)
+            time.sleep(p.readUserDebugParameter(self.slider))
+            # time.sleep(0.005)
         p.stepSimulation()
 
         if self.render:
@@ -782,3 +774,10 @@ class BulletEnv(Env):
                 break
 
         return contact
+
+    def update_object_poses(self):
+        for obj in self.objects:
+            pos, quat = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
+            obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
+                                                     quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
+                                                     inv=True)

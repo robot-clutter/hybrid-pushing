@@ -14,8 +14,8 @@ from scipy.spatial import Delaunay
 from scipy.spatial.distance import cdist
 import scipy
 
-from clutter.util.orientation import rot_x, rot_y, Quaternion
-# import torch
+from hpp.util.orientation import rot_x, rot_y, Quaternion
+import torch
 
 # def sigmoid(x, a=1, b=1, c=0, d=0):
 #     return a / (1 + exp(-b * x + c)) + d;
@@ -496,13 +496,16 @@ class NormalNoise(Noise):
     def __repr__(self):
         return 'NormalNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
 
+
 def sample_distribution(prob, rng, n_samples=1):
     """Sample data point from a custom distribution."""
     flat_prob = prob.flatten() / np.sum(prob)
+
     rand_ind = rng.choice(
         np.arange(len(flat_prob)), n_samples, p=flat_prob, replace=False)
     rand_ind_coords = np.array(np.unravel_index(rand_ind, prob.shape)).T
     return np.int32(rand_ind_coords.squeeze())
+
 
 def get_distance_of_two_bbox(pose_1, bbox_1, pose_2, bbox_2, density=0.005, plot=False):
     """

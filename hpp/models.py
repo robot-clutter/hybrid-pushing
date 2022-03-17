@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +15,7 @@ import os
 from hpp.core import Agent
 from hpp.util.memory import TaskPrioritizedReplayBuffer
 from hpp.util.math import min_max_scale
+from hpp.util.cv_tools import Feature
 
 GOAL = False
 
@@ -62,9 +65,9 @@ class ResidualBlock(nn.Module):
         return out
 
 
-class ResFCN(nn.Module):
+class GoalFCN(nn.Module):
     def __init__(self):
-        super(ResFCN, self).__init__()
+        super(GoalFCN, self).__init__()
 
         self.depth_extractor = ResidualBlock(1, 1)
         self.seg_extractor = ResidualBlock(1, 1)
@@ -89,8 +92,6 @@ class ResFCN(nn.Module):
     def make_layer(self, in_channels, out_channels, blocks=1, stride=1):
         downsample = None
         if (stride != 1) or (in_channels != out_channels):
-            # downsample = nn.Sequential(conv3x3(in_channels, out_channels, stride=stride),
-            #                            nn.BatchNorm2d(out_channels))
             downsample = nn.Sequential(conv3x3(in_channels, out_channels, stride=stride))
 
         layers = [ResidualBlock(in_channels, out_channels, stride, downsample)]
@@ -103,11 +104,8 @@ class ResFCN(nn.Module):
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg), self.goal_extractor(goal)), dim=1)
         else:
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg)), dim=1)
-        # x = depth
-        # plt.imshow(x[0].permute(1, 2, 0).detach().cpu().numpy())
-        # plt.show()
 
-        x = nn.functional.relu(self.conv1(x)) # ReLu is needed?
+        x = nn.functional.relu(self.conv1(x))
         x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
         x = self.rb1(x)
         x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
@@ -119,7 +117,7 @@ class ResFCN(nn.Module):
         x = nn.functional.upsample(x, scale_factor=2, mode='bilinear', align_corners=True)
         x = self.rb6(x)
         x = nn.functional.upsample(x, scale_factor=2, mode='bilinear', align_corners=True)
-        out = self.final_conv(x) # activation function?
+        out = self.final_conv(x)
         return out
 
     def forward(self, depth_heightmap, seg_heightmap, goal_heightmap, specific_rotation=-1, is_volatile=[]):
@@ -237,24 +235,20 @@ class QFCN(Agent):
 
         torch.manual_seed(0)
 
-        # self.fcn = FCN().to('cuda')
-        # self.target_fcn = FCN().to('cuda')
-        self.fcn = ResFCN().to('cuda')
-        self.target_fcn = ResFCN().to('cuda')
+        self.fcn = GoalFCN().to('cuda')
+        self.target_fcn = GoalFCN().to('cuda')
         self.optimizer = optim.Adam(self.fcn.parameters(), lr=self.params['learning_rate'])
         self.loss = nn.SmoothL1Loss(reduction='none')
-        # self.loss = nn.BCELoss(reduction='none')
 
-        # self.replay_buffer = ReplayBufferDisk(self.params['replay_buffer_size'], params['log_dir'])
-        # self.replay_buffer = TaskPrioritizedReplayBuffer(self.params['replay_buffer_size'], params['log_dir'])
+        self.replay_buffer = TaskPrioritizedReplayBuffer(self.params['replay_buffer_size'], params['log_dir'])
         self.save_buffer = False
 
         self.learn_step_counter = 0
         self.padding_width = 0
         self.padded_shape = []
 
-        # if not os.path.exists(os.path.join(self.params['log_dir'], 'maps')):
-        #     os.mkdir(os.path.join(self.params['log_dir'], 'maps'))
+        if not os.path.exists(os.path.join(self.params['log_dir'], 'maps')):
+            os.mkdir(os.path.join(self.params['log_dir'], 'maps'))
 
         # Initialize target fcn params to be tha same as fcn
         new_target_params = {}
@@ -269,11 +263,6 @@ class QFCN(Agent):
         self.last_action_was_empty = 0
 
     def preprocess_state(self, state):
-        # Apply 2x scale to input heightmaps
-        # depth_heightmap_2x = cv2.resize(state[0], (200, 200), interpolation=cv2.INTER_NEAREST)
-        # seg_heightmap_2x = cv2.resize(state[1], (200, 200), interpolation=cv2.INTER_NEAREST)
-        # goal_heightmap_2x = cv2.resize(state[2], (200, 200), interpolation=cv2.INTER_NEAREST)
-
         depth_heightmap_2x = state[0]
         seg_heightmap_2x = state[1]
         goal_heightmap_2x = state[2]
@@ -287,24 +276,10 @@ class QFCN(Agent):
         goal_heightmap_2x = np.pad(goal_heightmap_2x, self.padding_width, 'constant', constant_values=67)
         self.padded_shape = [depth_heightmap_2x.shape[0], depth_heightmap_2x.shape[1]]
 
-        # Normalize maps
-        # image_mean = 0.01
-        # image_std = 0.03
-        # depth_heightmap_2x = (depth_heightmap_2x - image_mean) / image_std
-
         depth_heightmap_2x = min_max_scale(depth_heightmap_2x,
                                            range=[np.min(depth_heightmap_2x), np.max(depth_heightmap_2x)],
                                            target_range=[0, 1])
-
-        # image_mean = [0.01, 0.01, 0.01]
-        # image_std = [0.03, 0.03, 0.03]
-        # depth_heightmap_2x.shape = (depth_heightmap_2x.shape[0], depth_heightmap_2x.shape[1], 1)
-        # input_depth_image = np.concatenate((depth_heightmap_2x, depth_heightmap_2x, depth_heightmap_2x), axis=2)
-        # for c in range(3):
-        #     input_depth_image[:, :, c] = (input_depth_image[:, :, c] - image_mean[c]) / image_std[c]
-
         seg_heightmap_2x = seg_heightmap_2x.astype(np.float32) / 255.0
-        # goal_heightmap_2x = goal_heightmap_2x.astype(np.float32) / 255.0
         goal_heightmap_2x = min_max_scale(goal_heightmap_2x,
                                           range=[np.min(goal_heightmap_2x), np.max(goal_heightmap_2x)],
                                           target_range=[0, 1])
@@ -319,11 +294,6 @@ class QFCN(Agent):
     def post_process(self, q_maps):
         """
         Remove extra padding
-
-        Params:
-            shape: the output shape of preprocess
-
-        Returns batch x rotations x w x h
         """
 
         w = int(q_maps.shape[2] - 2 * self.padding_width)
@@ -344,7 +314,7 @@ class QFCN(Agent):
         super(QFCN, self).seed(seed)
         self.replay_buffer.seed(seed)
 
-    def predict(self, state, plot=False):
+    def predict(self, state, plot=True):
         depth, seg, goal = self.preprocess_state(state)
         q_maps = self.fcn(depth_heightmap=depth, seg_heightmap=seg, goal_heightmap=goal, is_volatile=True)
         out_prob = self.post_process(q_maps)
@@ -363,8 +333,6 @@ class QFCN(Agent):
         print('best_action:', best_action)
 
         if plot:
-            seg_image = (state[1]).astype(np.uint8) + (state[2]).astype(np.uint8)
-
             glob_max_prob = np.max(out_prob)
             fig, ax = plt.subplots(4, 4)
             for i in range(16):
@@ -379,20 +347,9 @@ class QFCN(Agent):
                 best_pt = np.unravel_index(prediction_vis.argmax(), prediction_vis.shape)
                 maximum_prob = np.max(out_prob[0][i])
 
-                # prediction_vis = cv2.applyColorMap((prediction_vis * 255).astype(np.uint8), cv2.COLORMAP_JET)
-                # prediction_vis = cv2.cvtColor(prediction_vis, cv2.COLOR_BGR2RGB)
-                #
-                # # prediction_vis = ndimage.rotate(prediction_vis, i * (360.0 / 16), reshape=False,
-                # #                                 order=0)
-                # # background_image = ndimage.rotate(seg_image, i * (360.0 / 16), reshape=False,
-                # #                                   order=0)
-                # prediction_vis = (0.5 * cv2.cvtColor(seg_image, cv2.COLOR_RGB2BGR) + 0.5 * prediction_vis).astype(
-                #     np.uint8)
-                # format(321, ".2f")
                 ax[x, y].imshow(state[1], cmap='gray')
                 goal_pos = np.argwhere(state[2] == 0)
                 goal_centroid = np.mean(goal_pos, axis=0)
-                # ax[x, y].imshow(state[2], alpha=0.2, cmap='gray')
                 ax[x, y].plot(goal_centroid[1], goal_centroid[0], 'bx')
                 ax[x, y].imshow(prediction_vis, alpha=0.5)
                 ax[x, y].set_title(str(i) + ', ' + str(format(maximum_prob, ".3f")))
@@ -405,19 +362,9 @@ class QFCN(Agent):
                 dy = -20 * np.sin((i / 16) * 2 * np.pi)
                 ax[x, y].arrow(best_pt[1], best_pt[0], dx, dy, width=2, color='g')
 
-            # plt.show()
-            plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'), dpi=720)
+            plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'),
+                        dpi=720)
             plt.close()
-
-
-        # next_q_map = self.target_fcn(depth_heightmap=depth, seg_heightmap=seg, goal_heightmap=goal,
-        #                              specific_rotation=np.array([theta])).squeeze()
-        # print(next_q_map.shape, out_prob.shape)
-        # q_next = next_q_map[y, x].detach().cpu().numpy()
-        #
-        # q = out_prob[0, theta, y, x]
-        # print(q_next, q)
-        # input('')
 
         return best_action
 
@@ -427,21 +374,11 @@ class QFCN(Agent):
         target_mask = np.zeros(fused_map.shape).astype(np.uint8)
         target_mask[fused_map == 255] = 255
         target_mask_dilated = cv2.dilate(target_mask, np.ones((10, 10), np.uint8), iterations=1)
-        target_mask_dilated_edges = cv2.Canny(target_mask_dilated, 100, 200)
 
         obstacles_map = np.ones(fused_map.shape)
         obstacles_map[state[1] == 122] = 0.0
         small_target_dilated_mask = cv2.dilate(target_mask, np.ones((5, 5), np.uint8), iterations=1)
         valid_push_target_pxls = Feature(target_mask_dilated).mask_out(small_target_dilated_mask).array() * obstacles_map
-        ## Plot:
-        # fig, ax = plt.subplots(1, 6)
-        # ax[0].imshow(target_mask, cmap='gray')
-        # ax[1].imshow(target_mask_dilated, cmap='gray')
-        # ax[2].imshow(target_mask_dilated_edges, cmap='gray')
-        # ax[3].imshow(target_mask_dilated_edges * obstacles_map)
-        # ax[4].imshow(valid_push_target_pxls)
-        # ax[5].imshow(state[1])
-        # plt.show()
 
         ids = np.argwhere(valid_push_target_pxls > 0)
         if len(ids) == 0:
@@ -460,11 +397,9 @@ class QFCN(Agent):
 
         random_action = np.array([ids[k][1], ids[k][0], action_])
 
-        # random_action = self.rng.randint((0, 0, 0), (100, 100, 16), 3)
         return random_action
 
     def explore_push_obstacle(self, state):
-        goal_map = state[2]
         ids = np.argwhere(state[2] < 10)
         k = self.rng.randint(0, len(ids))
         random_action = np.array([ids[k][1], ids[k][0], np.random.randint(0, 15)])
@@ -473,7 +408,6 @@ class QFCN(Agent):
     def explore_push_obstacle_around_target(self, state):
         target_mask = np.zeros(state[1].shape)
         target_mask[state[1] == 255] = 255
-        target_mask_dilated = cv2.dilate(target_mask, np.ones((15, 15), np.uint8), iterations=1)
 
         ids = np.argwhere(state[2] < 10)
         k = self.rng.randint(0, len(ids))
@@ -509,21 +443,6 @@ class QFCN(Agent):
                          specific_rotation=np.array([action[2]]))
         q_map = self.post_process(q_map)
 
-        # theta = action[2] * (360 / 16)
-        # scale = 1.0
-        # rot = cv2.getRotationMatrix2D((50, 50), theta, scale)
-        # rotated_seg = cv2.warpAffine(state[1], rot, (100, 100))
-        # rotated_goal = cv2.warpAffine(state[2], rot, (100, 100))
-        # rotated_q_map = cv2.warpAffine(q_map[0][0], rot, (100, 100))
-
-        # fig, ax = plt.subplots(1, 3)
-        # ax[0].imshow(state[1])
-        # ax[1].imshow(state[2])
-        # ax[2].imshow(q_map[0][0])
-        # ax[2].set_title(str(action[2]))
-        # plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'))
-        # plt.close()
-
         return q_map[0, 0, action[1], action[0]]
 
     def learn(self, transition):
@@ -535,18 +454,8 @@ class QFCN(Agent):
         # Store transition to the replay buffer
         self.replay_buffer.store(transition, q_value)
 
-        # prev_reward_value = transition.reward
-        # if prev_reward_value == 1:
-        #     sample_reward_value = random.choice([0, 0.25, 0.5])
-        # elif prev_reward_value == 0.5:
-        #     sample_reward_value = random.choice([0, 0.25, 1.0])
-        # elif prev_reward_value == 0.25:
-        #     sample_reward_value = random.choice([0, 0.5, 1.0])
-        # else:
-        #     sample_reward_value = random.choice([0.25, 0.5, 1.0])
-
-        # sample_reward_value = random.choice([0.0, 0.25, 0.5, 1.0])
         sample_reward_value = random.choice([0.0, 0.5, 1.0])
+
         # Sample a batch from the replay buffer
         sampled_transition, sample_id = self.replay_buffer.sample(sample_reward_value)
         if sampled_transition is not None:

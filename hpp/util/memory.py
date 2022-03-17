@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 import os
 
-from clutter.core import Transition
+from hpp.core import Transition
 
 
 class ReplayBuffer:
