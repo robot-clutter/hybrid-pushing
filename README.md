@@ -16,10 +16,10 @@ pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f ht
 
 ## A Quick-Start: Demo in Simulation
 
-<img src="images/sim.gif" height=250px align="right" />
-<img src="images/sim.png" height=250px align="right" />
+<img src="images/sim.gif" height=200px align="right" />
+<img src="images/g-hybrid.gif" height=200px align="right" />
 
-This demo runs our pre-trained model with a UR5 robot arm in simulation on challenging picking scenarios with adversarial clutter. The goal is to singulate the target object (red one) from its surrounding clutter.
+This demo runs our pre-trained model with a UR5 robot arm in simulation on an environment with 8-13 objects. The objective is to singulate the target object (red one) from its surrounding clutter by reaching the target goal. Note that the goal is illustrated with a black circle. The video on the visualizes the L-Hybrid (local) policy while on the right the G-Hybrid (global) policy.
 
 ### Instructions 
 ```commandline
