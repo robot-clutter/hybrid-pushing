@@ -1,4 +1,7 @@
 import os
+
+import matplotlib.pyplot as plt
+
 import hrl
 
 import argparse
@@ -170,7 +173,7 @@ def her_singulation(mdp, agent, observations, actions):
 
 
 def train(env, agent, mdp, logger, rng, start_from=0, n_episodes=10000, episode_max_steps=50,
-          save_every=500, exp_name='', seed=0, her=True):
+          save_every=500, exp_name='', seed=0, her=True, goal=True):
     train_data = []
 
     for i in range(start_from, n_episodes):
@@ -179,7 +182,7 @@ def train(env, agent, mdp, logger, rng, start_from=0, n_episodes=10000, episode_
         print('Exp name:', exp_name)
         print('Session Seed: ', seed, 'Episode seed:', episode_seed)
         episode_data, observations, actions = run_episode(env, agent, mdp, episode_max_steps, train=True,
-                                                          seed=episode_seed)
+                                                          seed=episode_seed, goal=goal)
         train_data.append(episode_data)
 
         if her:
@@ -193,7 +196,7 @@ def train(env, agent, mdp, logger, rng, start_from=0, n_episodes=10000, episode_
             pickle.dump(rng.get_state(), open(os.path.join(logger.log_dir, 'model_' + str(i), 'rng_state.pkl'), 'wb'))
 
 
-def evaluate(env, agent, mdp, logger, n_episodes=10000, episode_max_steps=50, exp_name='', seed=0):
+def evaluate(env, agent, mdp, logger, n_episodes=10000, episode_max_steps=50, exp_name='', seed=0, goal=True):
     eval_data = []
     rng = np.random.RandomState()
     rng.seed(seed)
@@ -203,7 +206,7 @@ def evaluate(env, agent, mdp, logger, n_episodes=10000, episode_max_steps=50, ex
         episode_seed = rng.randint(0, pow(2, 32) - 1)
         print('Exp name:', exp_name)
         print('Session Seed: ', seed, 'Episode seed:', episode_seed)
-        episode_data, _, _ = run_episode(env, agent, mdp, episode_max_steps, train=False, seed=episode_seed)
+        episode_data, _, _ = run_episode(env, agent, mdp, episode_max_steps, train=False, seed=episode_seed, goal=goal)
         eval_data.append(episode_data)
         print('--------------------')
 
@@ -308,56 +311,58 @@ def test(args):
     if env == 4:
         evaluate_challenging(env, agent, mdp, logger, args.episode_max_steps)
     else:
-        evaluate(env, agent, mdp, logger, args.n_episodes, args.episode_max_steps, seed=args.seed)
+        evaluate(env, agent, mdp, logger, args.test_trials, args.episode_max_steps, seed=args.seed, goal=args.goal)
 
 
 def run(args):
     if args.is_testing:
         test(args)
 
-    with open('../yaml/params.yml', 'r') as stream:
-        params = yaml.safe_load(stream)
-
-    if args.walls:
-        params['env']['workspace']['walls'] = True
-        params['env']['scene_generation']['nr_of_obstacles'] = [5, 10]
-
-    if args.resume_model is not None:
-        train_dir = '../logs/train_' + args.exp_name
-        with open(os.path.join(train_dir, 'params.yml'), 'r') as stream:
+    else:
+        with open('../yaml/params.yml', 'r') as stream:
             params = yaml.safe_load(stream)
 
-        logger = Logger('train_' + args.exp_name, reply_='p')
+        if args.walls:
+            params['env']['workspace']['walls'] = True
+            params['env']['scene_generation']['nr_of_obstacles'] = [5, 10]
+
+        if args.resume_model is not None:
+            train_dir = '../logs/train_' + args.exp_name
+            with open(os.path.join(train_dir, 'params.yml'), 'r') as stream:
+                params = yaml.safe_load(stream)
+
+            logger = Logger('train_' + args.exp_name, reply_='p')
+            params['agent']['log_dir'] = logger.log_dir
+        else:
+            logger = Logger('train_' + args.exp_name)
+            logger.log_yml(params, 'params')
+
         params['agent']['log_dir'] = logger.log_dir
-    else:
-        logger = Logger('train_' + args.exp_name)
-        logger.log_yml(params, 'params')
 
-    params['agent']['log_dir'] = logger.log_dir
+        env = BulletEnv(params=params['env'])
+        if args.goal:
+            mdp = PushEverywhere(params)
+            her = True
+        else:
+            mdp = PushEvereywherRLonly(params)
+            her = False
 
-    env = BulletEnv(params=params['env'])
-    if args.goal:
-        mdp = PushEverywhere(params)
-        her = True
-    else:
-        mdp = PushEvereywherRLonly(params)
-        her = False
+        rng = np.random.RandomState()
 
-    rng = np.random.RandomState()
+        if args.resume_model is not None:
+            qfcn = QFCN.resume(log_dir=os.path.join(logger.log_dir, 'model_' + str(args.resume_model)))
+            qfcn.seed(args.seed)
+            rng.seed(args.seed + args.resume_model)
+            start_from = args.resume_model + 1
+        else:
+            params['goal'] = args.goal
+            qfcn = QFCN(params['agent'])
+            qfcn.seed(args.seed)
+            rng.seed(args.seed)
+            start_from = 0
 
-    if args.resume_model is not None:
-        qfcn = QFCN.resume(log_dir=os.path.join(logger.log_dir, 'model_' + str(args.resume_model)))
-        qfcn.seed(args.seed)
-        rng.seed(args.seed + args.resume_model)
-        start_from = args.resume_model + 1
-    else:
-        qfcn = QFCN(params['agent'])
-        qfcn.seed(args.seed)
-        rng.seed(args.seed)
-        start_from = 0
-
-    train(env, qfcn, mdp, logger, rng, start_from, args.n_episodes, args.episode_max_steps,
-          args.exp_name, args.seed, args.save_every, her)
+        train(env, qfcn, mdp, logger, rng, start_from, args.n_episodes, args.episode_max_steps,
+              args.exp_name, args.seed, args.save_every, her, args.goal)
 
 
 def parse_args():
@@ -370,7 +375,7 @@ def parse_args():
 
     # -------------- Training options --------------
     parser.add_argument('--exp_name', default='hybrid', type=str, help='Name of experiment to run')
-    parser.add_argument('--goal', default=True, type=bool, help='flag for using goal or not')
+    parser.add_argument('--goal', dest='goal', action='store_true', default=False)
     parser.add_argument('--n_episodes', default=10000, type=int, help='Number of episodes to run for')
     parser.add_argument('--resume_model', default='None', type=str, help='Path for the model to resume training')
     parser.add_argument('--save_every', default=100, type=int, help='Number of episodes to save the model')
