@@ -17,8 +17,6 @@ from hpp.util.memory import TaskPrioritizedReplayBuffer
 from hpp.util.math import min_max_scale
 from hpp.util.cv_tools import Feature
 
-GOAL = False
-
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -66,12 +64,13 @@ class ResidualBlock(nn.Module):
 
 
 class GoalFCN(nn.Module):
-    def __init__(self):
+    def __init__(self, goal):
         super(GoalFCN, self).__init__()
 
         self.depth_extractor = ResidualBlock(1, 1)
         self.seg_extractor = ResidualBlock(1, 1)
-        if GOAL:
+        self.goal = goal
+        if goal:
             self.goal_extractor = ResidualBlock(1, 1)
             input_channels = 3
         else:
@@ -100,7 +99,7 @@ class GoalFCN(nn.Module):
         return nn.Sequential(*layers)
 
     def predict(self, depth, seg, goal):
-        if GOAL:
+        if self.goal:
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg), self.goal_extractor(goal)), dim=1)
         else:
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg)), dim=1)
@@ -235,8 +234,8 @@ class QFCN(Agent):
 
         torch.manual_seed(0)
 
-        self.fcn = GoalFCN().to('cuda')
-        self.target_fcn = GoalFCN().to('cuda')
+        self.fcn = GoalFCN(params['goal']).to('cuda')
+        self.target_fcn = GoalFCN(params['goal']).to('cuda')
         self.optimizer = optim.Adam(self.fcn.parameters(), lr=self.params['learning_rate'])
         self.loss = nn.SmoothL1Loss(reduction='none')
 
@@ -427,7 +426,7 @@ class QFCN(Agent):
                 if action is None:
                     return self.rng.randint((0, 0, 0), (100, 100, 16))
             else:
-                if GOAL:
+                if self.params['goal']:
                     action = self.explore_push_obstacle(state)
                 else:
                     action = self.explore_push_obstacle_around_target(state)
