@@ -705,7 +705,10 @@ class BulletEnv(Env):
                 pos, _ = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
                 error = self.workspace2world(target.pos)[0] - pos
                 if np.linalg.norm(error) < radius:
-                    force_direction = error / np.linalg.norm(error)
+                    if np.linalg.norm(error) < 1e-6:
+                        force_direction = np.array([0, 0, 0])
+                    else:
+                        force_direction = error / np.linalg.norm(error)
                     pos_apply = np.array([pos[0], pos[1], 0])
                     p.applyExternalForce(obj.body_id, -1, obj_force_magnitude * force_direction, pos_apply, p.WORLD_FRAME)
 
