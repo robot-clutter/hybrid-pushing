@@ -32,12 +32,12 @@ Download the pretrained models:
 ## Training
 To train the hybrid pushing policy from scratch with random goals in simulation run the following command:
 ```commandline
-python run.py --exp_name hybrid --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
+python run.py --exp_name hybrid --goal --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
 ```
 
 To train without the goal run the following command:
 ```commandline
-python run.py --exp_name rl --goal False --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
+python run.py --exp_name rl --n_episodes 10000 --episode_max_steps 10 --seed 0 --save_every 100
 ```
 
 For training in the environment with the walls just run the above commands with the flag --walls True.
@@ -46,10 +46,15 @@ For training in the environment with the walls just run the above commands with 
 ## Evaluation
 To test your own trained model, simply change the location of --snapshot_file:
 ```commandline
-python run.py --is_testing --policy g-hybrid --snapsot_file 'YOUR-SNAPSHOT-FILE-HERE' --test_trials 100 --episode_max_steps 10 --seed 1
+python run.py --is_testing --policy g-hybrid --snapshot_file 'YOUR-SNAPSHOT-FILE-HERE' --test_trials 100 --episode_max_steps 10 --seed 1
 ```
 
 To evaluate on the challenging scenes:
 ```commandline
 python run.py --is_testing --policy g-hybrid --test_preset_cases  --episode_max_steps 15
+```
+
+To evaluate all models:
+```commandline
+python run.py --eval_all True --exp_name hybrid_policy --seed 1
 ```
