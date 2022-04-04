@@ -79,8 +79,8 @@ def compute_free_space_map(push_target_map):
 
     # Compute min distance for each point from table limits
     dists_surface = np.zeros((push_target_map.shape[0], push_target_map.shape[1]))
-    for i in range(push_target_map.shape[0]):
-        for j in range(push_target_map.shape[1]):
+    for i in range(push_target_map.shape[0] - 10):
+        for j in range(push_target_map.shape[1] - 10):
             dists_surface[i, j] = np.min(np.array([i, push_target_map.shape[0] - i, j, push_target_map.shape[1] - j]))
 
     map = np.minimum(dist, dists_surface)
