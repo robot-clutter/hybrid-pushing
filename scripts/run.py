@@ -265,6 +265,71 @@ def evaluate_challenging(env, agent, mdp, logger, episode_max_steps):
         return 0, 0
 
 
+def eval_all(args):
+    import sys
+    import time
+
+    def block_print():
+        sys.stdout = open(os.devnull, 'w')
+
+    def enable_print():
+        sys.stdout = sys.__stdout__
+
+    train_dir = '../logs/train_' + args.exp_name
+    with open(os.path.join(train_dir, 'params.yml'), 'r') as stream:
+        params = yaml.safe_load(stream)
+
+    logger = Logger('eval_' + args.exp_name + '_all')
+    logger.log_yml(params, 'params')
+
+    env = BulletEnv(params=params['env'])
+
+    mdp = PushEverywhereEval(params)
+    mdp.seed(args.seed)
+    mdp.random_goal = True
+    # if args.policy == 'g-hybrid':
+    #     mdp.local = False
+    # else:
+    #     mdp.local = True
+
+    previous_models = []
+    current_models = []
+    while True:
+        while True:
+            sub_folders = next(os.walk(train_dir))[1]
+            sub_folders.sort()
+            for sub_folder in sub_folders:
+                if sub_folder.split('_')[0] == 'model':
+                    if int(sub_folder.split('_')[-1]) in previous_models:
+                        continue
+                    else:
+                        current_models.append(int(sub_folder.split('_')[-1]))
+                        break
+
+            if len(previous_models) < len(current_models):
+                break
+            time.sleep(60)
+
+        previous_models = current_models.copy()
+
+        success_rates = []
+        actions = []
+        agent = QFCN.load(log_dir=os.path.join(train_dir, 'model_' + str(current_models[-1])))
+        agent.eval_mode = True
+
+        block_print()
+        success_rate, mean_actions = evaluate(env, agent, mdp, logger, n_episodes=100,
+                                              episode_max_steps=10, seed=args.seed)
+        enable_print()
+        print('Model {}: {}, {}'.format(current_models[-1], success_rate, mean_actions))
+
+        success_rates.append(success_rate)
+        actions.append(mean_actions)
+
+        pickle.dump({'model_epochs': current_models, 'success_rates': success_rates, 'actions': actions},
+                    open(os.path.join(logger.log_dir, 'results'), 'wb'))
+
+
 def test(args):
     walls = False
     if args.env == 1:
