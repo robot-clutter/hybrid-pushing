@@ -413,11 +413,9 @@ class PushEverywhere(MDP):
         target_pos_n = next(x.pos for x in next_obs['full_state']['objects'] if x.name == 'target')
         dist = np.linalg.norm(target_pos[0:2] - self.goal_pos)
         dist_n = np.linalg.norm(target_pos_n[0:2] - self.goal_pos)
-        print(dist, dist_n)
 
         no_of_obstacles = get_obstacle_pxls_in_singulation_area(obs)
         no_of_obstacles_n = get_obstacle_pxls_in_singulation_area(next_obs)
-        print('obstacles:', no_of_obstacles, no_of_obstacles_n)
 
         if self.target_singulated(next_obs):
             return 1.0
