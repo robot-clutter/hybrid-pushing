@@ -64,18 +64,18 @@ class ResidualBlock(nn.Module):
 
 
 class GoalFCN(nn.Module):
-    def __init__(self, goal):
+    def __init__(self, use_goal):
         super(GoalFCN, self).__init__()
 
         self.depth_extractor = ResidualBlock(1, 1)
         self.seg_extractor = ResidualBlock(1, 1)
-        self.goal = goal
-        if goal:
+        self.use_goal = use_goal
+        if use_goal:
             self.goal_extractor = ResidualBlock(1, 1)
             input_channels = 3
         else:
             input_channels = 2
-        
+
         self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.rb1 = self.make_layer(64, 128)
         self.rb2 = self.make_layer(128, 256)
@@ -99,7 +99,7 @@ class GoalFCN(nn.Module):
         return nn.Sequential(*layers)
 
     def predict(self, depth, seg, goal):
-        if self.goal:
+        if self.use_goal:
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg), self.goal_extractor(goal)), dim=1)
         else:
             x = torch.cat((self.depth_extractor(depth), self.seg_extractor(seg)), dim=1)
@@ -541,9 +541,7 @@ class QFCN(Agent):
     def load(cls, log_dir):
         log_data = pickle.load(open(os.path.join(log_dir, 'log_data.pkl'), 'rb'))
         self = cls(params=log_data['params'])
-
         self.fcn.load_state_dict(torch.load(os.path.join(log_dir, 'model.pt')))
-
         self.fcn.eval()
         return self
 
