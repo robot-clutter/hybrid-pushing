@@ -46,7 +46,7 @@ For training in the environment with the walls just run the above commands with 
 ## Evaluation
 To test your own trained model, simply change the location of --snapshot_file:
 ```commandline
-python run.py --is_testing --policy g-hybrid --snapshot_file 'YOUR-SNAPSHOT-FILE-HERE' --test_trials 100 --episode_max_steps 10 --seed 1
+python run.py --is_testing --policy g-hybrid --snapshot_file 'YOUR-SNAPSHOT-FILE-HERE' --test_trials 100 --episode_max_steps 10 --seed 10
 ```
 
 To evaluate on the challenging scenes:
