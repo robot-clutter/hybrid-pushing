@@ -341,8 +341,7 @@ class QFCN(Agent):
                 min_prob = np.min(out_prob[0][i])
                 max_prob = np.max(out_prob[0][i])
 
-                prediction_vis = min_max_scale(out_prob[0][i], range=(min_prob, max_prob),
-                                                   target_range=(0, 1))
+                prediction_vis = min_max_scale(out_prob[0][i], range=(min_prob, max_prob), target_range=(0, 1))
                 best_pt = np.unravel_index(prediction_vis.argmax(), prediction_vis.shape)
                 maximum_prob = np.max(out_prob[0][i])
 
@@ -361,7 +360,9 @@ class QFCN(Agent):
                 dy = -20 * np.sin((i / 16) * 2 * np.pi)
                 ax[x, y].arrow(best_pt[1], best_pt[0], dx, dy, width=2, color='g')
 
-            plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'),
+            # plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'),
+            #             dpi=720)
+            plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map.png'),
                         dpi=720)
             plt.close()
 
