@@ -350,12 +350,6 @@ class BulletEnv(Env):
     def seed(self, seed=None):
         self.rng.seed(seed)
 
-    def remove_body(self, idx):
-        p.removeBody(idx)
-        obj = next(x for x in self.objects if x.body_id == idx)
-        self.objects.remove(obj)
-        self.scene_generator.objects.remove(obj)
-
     def load_obj(self, obj_path, scaling, position, orientation, name, fixed_base=False, visual_path=None):
         if name == 'target':
             random_color = np.array([1.0, 0.0, 0.0])
@@ -550,9 +544,7 @@ class BulletEnv(Env):
         p.setGravity(0, 0, -10)
 
         self.load_robot_and_workspace()
-        self.scene_generator.reset()
-        self.scene_generator.generate_scene(hugging=False)
-        self.add_challenging(self.scene_generator, preset_case)
+        self.add_challenging(preset_case)
 
         t = 0
         while t < 3000:
@@ -689,7 +681,7 @@ class BulletEnv(Env):
         return {'rgb': rgb, 'depth': depth, 'seg': seg, 'full_state': copy.deepcopy(full_state),
                 'collision': self.collision}
 
-    def hug(self, force_magnitude=15, radius=0.2, duration=300):
+    def hug(self, force_magnitude=15, radius=0.25, duration=300):
         target = next(x for x in self.objects if x.name == 'target')
         t = 0
         while t < duration:
