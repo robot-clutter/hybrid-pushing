@@ -12,6 +12,7 @@ import time
 import math
 import cv2
 import os
+import random
 
 from hpp.util.robotics import Trajectory
 from hpp.util.orientation import Quaternion, Affine3, rot_z
@@ -414,7 +415,7 @@ class BulletEnv(Env):
             z = 0.02
             return np.array([x, y, z])
 
-        def sample_toy_blocks():
+        def sample_toy_blocks(n_targets):
             nr_of_obstacles = self.params['scene_generation']['nr_of_obstacles']
             n_obstacles = nr_of_obstacles[0] + self.rng.randint(nr_of_obstacles[1] - nr_of_obstacles[0] + 1)
             objects = []
@@ -428,11 +429,17 @@ class BulletEnv(Env):
                              quat=Quaternion(),
                              obj_path=self.rng.choice(self.obj_files))
                 objects.append(obj)
-            objects[0].name = 'target'
+            # objects[0].name = 'target'
+
+            target_ids = random.sample(range(1, n_obstacles), n_targets)
+            for target_id in target_ids:
+                objects[target_id].name = 'target'
+
             return objects
 
         # Sample n objects from the database.
-        objs = sample_toy_blocks()
+        n_targets = np.random.randint(1, 4)
+        objs = sample_toy_blocks(n_targets)
 
         for obj in objs:
             body_id = self.load_obj(obj.obj_path, 1.0, obj.pos, obj.quat.as_vector("xyzw"), name=obj.name)
@@ -526,7 +533,7 @@ class BulletEnv(Env):
         # Update position and orientation
         self.update_object_poses()
 
-        self.hug()
+        # self.hug()
 
         t = 0
         while self.objects_still_moving():

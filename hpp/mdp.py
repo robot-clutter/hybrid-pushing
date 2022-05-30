@@ -150,7 +150,7 @@ class PushEverywhere(MDP):
             obstacles_mask = np.zeros(fused_map.shape).astype(np.uint8)
             obstacles_mask[fused_map == 122] = 255
             target_mask_dilated += obstacles_mask
-        
+
             pxls_no_target = np.argwhere(target_mask_dilated == 0)
             filetered_pxls = []
             for pxl in pxls_no_target:
@@ -169,19 +169,25 @@ class PushEverywhere(MDP):
             pxl: goal position (x, y)
         """
 
+        goal_centroid = pxl
+
         fused_map = self.state_representation(obs)[1]
         target_mask = np.zeros(fused_map.shape).astype(np.uint8)
         target_mask[fused_map == 255] = 255
-        
-        goal_centroid = pxl
-        dims = self.crop_table
-        target_ids = np.argwhere(target_mask == 255)
-        y_min = np.min(target_ids[:, 0])
-        y_max = np.max(target_ids[:, 0])
-        x_min = np.min(target_ids[:, 1])
-        x_max = np.max(target_ids[:, 1])
-        radius = np.sqrt(np.power(y_max - y_min, 2) + np.power(x_max - x_min, 2)) / 2.0
-        radius += 1
+
+        contours, _ = cv2.findContours(target_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        radius = 0
+        for cnt in contours:
+            points = []
+            for pnt in cnt:
+                points.append(np.array([pnt[0, 0], pnt[0, 1]]))
+            points = np.asarray(points)
+            y_min = np.min(points[:, 0])
+            y_max = np.max(points[:, 0])
+            x_min = np.min(points[:, 1])
+            x_max = np.max(points[:, 1])
+            radius += np.sqrt(np.power(y_max - y_min, 2) + np.power(x_max - x_min, 2)) / 2.0
 
         x = np.linspace(0, fused_map.shape[0] - 1, fused_map.shape[0])
         y = np.linspace(0, fused_map.shape[1] - 1, fused_map.shape[1])
@@ -199,6 +205,9 @@ class PushEverywhere(MDP):
         positional_map[positional_map < 0] = 0
 
         self.goal = positional_map.copy()
+
+        plt.imshow(self.goal)
+        plt.show()
 
         self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]),
                                              (-SURFACE_SIZE, SURFACE_SIZE))
@@ -251,14 +260,24 @@ class PushEverywhere(MDP):
         heightmap = cv2.resize(heightmap, (100, 100), interpolation=cv2.INTER_NEAREST)
 
         mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
-        target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
-        mask[seg == target_id] = 255
+        # target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
+
+        for x in obs['full_state']['objects']:
+            if x.name == 'target':
+                mask[seg == x.body_id] = 255
+
+        # mask[seg == target_id] = 255
         mask = Feature(mask).crop(CROP_TABLE, CROP_TABLE).array()
         mask = cv2.resize(mask, (100, 100), interpolation=cv2.INTER_NEAREST)
 
         fused_heightmap = np.zeros((heightmap.shape[0], heightmap.shape[1], 1), dtype=np.uint8)
         fused_heightmap[heightmap > 0] = 122
         fused_heightmap[mask == 255] = 255
+
+        fig, ax = plt.subplots(1, 2)
+        ax[0].imshow(heightmap)
+        ax[1].imshow(fused_heightmap.squeeze())
+        plt.show()
 
         return heightmap, fused_heightmap.squeeze(), self.goal
 
@@ -272,8 +291,10 @@ class PushEverywhere(MDP):
         # ToDo: end the episode for maximum number of pushes
         target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
 
-        if target.pos[2] < 0 or (mask == 0).all():
-            return 3
+        for x in next_obs['full_state']['objects']:
+            if x.name == 'target':
+                if x.pos[2] < 0:
+                    return 3
 
         if self.empty(obs, next_obs):
             return -1
@@ -284,19 +305,28 @@ class PushEverywhere(MDP):
         return 0
 
     def fallen(self, obs, next_obs):
-        # rgb, depth, seg = obs['rgb'], obs['depth'], obs['seg']
-        # target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
-        # mask = np.zeros((rgb.shape[0], rgb.shape[1]), dtype=np.uint8)
-        # mask[seg == target_id] = 255
-        #
-        # # In case the target is singulated or falls of the table the episode is singulated
-        # # ToDo: end the episode for maximum number of pushes
-        # target = next(x for x in obs['full_state']['objects'] if x.name == 'target')
 
-        target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
-        if target.pos[2] < 0:
-            return True
+        for x in next_obs['full_state']['objects']:
+            if x.name == 'target':
+                if x.pos[2] < 0:
+                    return True
         return False
+
+        # current_fallen = []
+        # for obj in obs['full_state']['objects']:
+        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
+        #         current_fallen.append(obj.name)
+        #
+        # next_fallen = []
+        # for obj in next_obs['full_state']['objects']:
+        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
+        #         next_fallen.append(obj.name)
+        #
+        # # print(current_fallen, next_fallen)
+        # if len(next_fallen) > len(current_fallen):
+        #     return True
+        # else:
+        #     return False
 
     def empty(self, obs, next_obs, eps=0.005):
         """
@@ -363,8 +393,9 @@ class PushEverywhere(MDP):
 
     def target_singulated(self, obs):
         def get_overlay(obs):
-            target_mask, target_mask_centroid = self.get_mask_and_centroid(obs)
-            fused_map = self.state_representation(obs)[1]
+            fused_map = self.state_representation(obs)[1].squeeze()
+            target_mask = np.zeros(fused_map.shape).astype(np.uint8)
+            target_mask[fused_map == 255] = 255
 
             target_goal_mask = np.zeros(fused_map.shape)
             target_goal_mask[self.goal == 0] = 255
@@ -377,8 +408,6 @@ class PushEverywhere(MDP):
 
             return overlay_ratio
 
-        target_pos = next(x.pos for x in obs['full_state']['objects'] if x.name == 'target')
-        dist = np.linalg.norm(target_pos[0:2] - self.goal_pos)
         iou = get_overlay(obs)
 
         fused_map = self.state_representation(obs)[1]
@@ -417,6 +446,15 @@ class PushEverywhere(MDP):
 
         target_pos = next(x.pos for x in obs['full_state']['objects'] if x.name == 'target')
         target_pos_n = next(x.pos for x in next_obs['full_state']['objects'] if x.name == 'target')
+
+        for x in obs['full_state']['objects']:
+            if x.name == 'target':
+                for y in next_obs['full_state']['objects']:
+                    if y.body_id == x.body_id:
+                        dist = np.linalg.norm(x.pos[0:2] - self.goal_pos)
+                        dist_n = np.linalg.norm(y.pos[0:2] - self.goal_pos)
+
+
         dist = np.linalg.norm(target_pos[0:2] - self.goal_pos)
         dist_n = np.linalg.norm(target_pos_n[0:2] - self.goal_pos)
 
