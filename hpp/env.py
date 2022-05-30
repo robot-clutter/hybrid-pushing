@@ -441,7 +441,7 @@ class BulletEnv(Env):
         objs = sample_toy_blocks()
 
         for obj in objs:
-            body_id = self.load_obj(obj.obj_path, 1.2, obj.pos, obj.quat.as_vector("xyzw"), name=obj.name)
+            body_id = self.load_obj(obj.obj_path, 1.0, obj.pos, obj.quat.as_vector("xyzw"), name=obj.name)
             size = (np.array(p.getAABB(body_id)[1]) - np.array(p.getAABB(body_id)[0])) / 2.0
             p.removeBody(body_id)
 
@@ -476,7 +476,7 @@ class BulletEnv(Env):
 
             pos, quat = self.workspace2world(pos=pos, quat=quat)
 
-            body_id = self.load_obj(obj.obj_path, 1.2, pos, quat.as_vector("xyzw"),
+            body_id = self.load_obj(obj.obj_path, 1.0, pos, quat.as_vector("xyzw"),
                                     visual_path=obj.obj_path, name=obj.name)
             self.objects.append(Object(name=obj.name, pos=pos, quat=quat, size=size, body_id=body_id))
 
