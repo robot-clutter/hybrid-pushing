@@ -138,6 +138,8 @@ class PushEverywhere(MDP):
         self.local = False
         self.singulation_distance = 0.03
 
+        self.goal_centroid = np.array([0, 0])
+
     def reset_goal(self, obs):
         if self.random_goal:
             fused_map = self.state_representation(obs)[1]
@@ -145,6 +147,10 @@ class PushEverywhere(MDP):
             target_mask[fused_map == 255] = 255
             target_mask_dilated = cv2.dilate(target_mask, np.ones((15, 15), np.uint8), iterations=1)
 
+            obstacles_mask = np.zeros(fused_map.shape).astype(np.uint8)
+            obstacles_mask[fused_map == 122] = 255
+            target_mask_dilated += obstacles_mask
+        
             pxls_no_target = np.argwhere(target_mask_dilated == 0)
             filetered_pxls = []
             for pxl in pxls_no_target:
