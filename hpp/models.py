@@ -414,6 +414,31 @@ class QFCN(Agent):
         random_action = np.array([ids[k][1], ids[k][0], np.random.randint(0, 15)])
         return random_action
 
+    def explore_around_objects(self, state):
+        objects_mask = np.zeros(state[0].shape)
+        objects_mask[state[0] > 0] = 255
+
+        kernel = np.ones((15, 15), np.uint8)
+        dilated_mask = cv2.dilate(objects_mask, kernel, iterations=1)
+        diff_mask = dilated_mask - objects_mask
+
+        ids = np.argwhere(diff_mask > 0)
+        k = self.rng.randint(0, len(ids))
+        p_1 = np.array([ids[k][1], ids[k][0]])
+
+        mask_ids = np.argwhere(objects_mask > 0)
+        k = self.rng.randint(0, len(mask_ids))
+        p_2 = np.array([mask_ids[k][1], mask_ids[k][0]])
+
+        direction = (p_2 - p_1) / np.linalg.norm(p_2 - p_1)
+        direction[1] *= -1  # go to inertia frame
+        theta = np.arctan2(direction[1], direction[0])
+        if theta < 0:
+            theta += 2 * np.pi
+        discrete_angle = int((theta / (2 * np.pi)) * 16)
+
+        random_action = np.array([p_1[0], p_1[1], discrete_angle])
+        return random_action
     def explore(self, state):
         epsilon = self.params['epsilon_end'] + (self.params['epsilon_start'] - self.params['epsilon_end']) * \
                        math.exp(-1 * self.learn_step_counter / self.params['epsilon_decay'])

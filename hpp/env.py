@@ -432,14 +432,14 @@ class BulletEnv(Env):
                 objects.append(obj)
             # objects[0].name = 'target'
 
-            target_ids = random.sample(range(1, n_obstacles), n_targets)
+            target_ids = self.rng.choice(range(1, n_obstacles), n_targets)
             for target_id in target_ids:
                 objects[target_id].name = 'target'
 
             return objects
 
         # Sample n objects from the database.
-        n_targets = np.random.randint(1, 4)
+        n_targets = self.rng.randint(1, 2)
         objs = sample_toy_blocks(n_targets)
 
         for obj in objs:
@@ -465,7 +465,6 @@ class BulletEnv(Env):
             # plt.plot(pixx[1], pixx[0], 'x')
             # plt.show()
             # print('Prob:', free[pixx[0], pixx[1]])
-
 
             if (not self.params['scene_generation']['target'].get('randomize_pos', True)) and (obj.name == 'target'):
                 pixx = [free.shape[0] / 2, free.shape[1] / 2]
@@ -760,7 +759,7 @@ class BulletEnv(Env):
         return {'rgb': rgb, 'depth': depth, 'seg': seg, 'full_state': copy.deepcopy(full_state),
                 'collision': self.collision}
 
-    def hug(self, force_magnitude=15, radius=0.25, duration=300):
+    def hug(self, force_magnitude=15, radius=0.2, duration=300):
         target = next(x for x in self.objects if x.name == 'target')
         t = 0
         while t < duration:
@@ -774,7 +773,8 @@ class BulletEnv(Env):
                     obj_force_magnitude = force_magnitude
 
                 pos, _ = p.getBasePositionAndOrientation(bodyUniqueId=obj.body_id)
-                error = self.workspace2world(target.pos)[0] - pos
+                # error = self.workspace2world(target.pos)[0] - pos
+                error = self.workspace2world(np.array([0, 0, 0]))[0] - pos
                 if np.linalg.norm(error) < radius:
                     if np.linalg.norm(error) < 1e-6:
                         force_direction = np.array([0, 0, 0])
