@@ -482,6 +482,75 @@ class BulletEnv(Env):
                                     visual_path=obj.obj_path, name=obj.name)
             self.objects.append(Object(name=obj.name, pos=pos, quat=quat, size=size, body_id=body_id))
 
+    def add_single_box(self, single_obj):
+        if single_obj.name == 'target':
+            color = [1, 0, 0, 1]
+        else:
+            color = [0, 0, 1, 1]
+        col_box_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=single_obj.size)
+        visual_shape_id = p.createVisualShape(shapeType=p.GEOM_BOX,
+                                              halfExtents=single_obj.size,
+                                              rgbaColor=color)
+
+        pos = single_obj.pos
+        if single_obj.name != 'target':
+            pos[2] += 0.03
+
+        base_position, base_orientation = self.workspace2world(pos=single_obj.pos, quat=single_obj.quat)
+        base_orientation = base_orientation.as_vector("xyzw")
+        mass = 1.0
+        body_id = p.createMultiBody(mass, col_box_id, visual_shape_id,
+                                    base_position, base_orientation)
+        single_obj.body_id = body_id
+        return body_id
+
+    def add_tightly_packed_boxes(self, grid=[3, 3], obj_size=[0.03, 0.03, 0.03], crop_size=193):
+
+        def get_pxl_distance(meters):
+            return meters * crop_size / SURFACE_SIZE
+
+        def get_xyz(pxl):
+            x = min_max_scale(pxl[0], range=(0, 2 * 193), target_range=(-0.25, 0.25))
+            y = -min_max_scale(pxl[1], range=(0, 2 * 193), target_range=(-0.25, 0.25))
+            z = 0.02
+            return np.array([x, y, z])
+
+        # objects = []
+        objects = [Object(name='target', pos=np.array([1.0, 1.0, 0.05]), quat=Quaternion(), size=obj_size)]
+        for i in range(grid[0] * grid[1]):
+            obj = Object(name='obs_' + str(i), pos=np.array([1.0, 1.0, 0.05]), quat=Quaternion(), size=obj_size)
+            objects.append(obj)
+
+        seg = self.get_obs()['seg']
+        seg = Feature(seg).crop(crop_size, crop_size).array()
+
+        safe_bound = 100
+        bounds = [seg.shape[0] - safe_bound, seg.shape[1] - safe_bound]
+        pixx = [self.rng.randint(safe_bound, bounds[0]), self.rng.randint(safe_bound, bounds[1])]
+
+        theta = self.rng.rand() * 2 * np.pi
+        theta = 0
+
+        for x in range(grid[0]):
+            for y in range(grid[1]):
+                i = x + y*grid[0]
+                body_id = self.add_single_box(objects[i])
+                p.removeBody(body_id)
+
+                obj_pxl_size = [int(get_pxl_distance(obj_size[0])), int(get_pxl_distance(obj_size[0]))]
+                pix = np.array([pixx[0] + 2 * obj_pxl_size[0] * x,
+                                pixx[1] + 2 * obj_pxl_size[1] * y])
+
+                pos = get_xyz(pix)
+                quat = Quaternion().from_rotation_matrix(rot_z(theta))
+
+                objects[i].pos = pos
+                objects[i].quat = quat
+                body_id = self.add_single_box(objects[i])
+                self.objects.append(Object(name=objects[i].name, pos=objects[i].pos, quat=objects[i].quat,
+                                           size=objects[i].size, body_id=body_id))
+                self.get_obs()
+
     def add_challenging(self, test_preset_file):
         # If testing, read object meshes and poses from test case file
         obj_mesh_dir = '../assets/blocks'
@@ -522,9 +591,11 @@ class BulletEnv(Env):
         # Load robot and workspace
         self.load_robot_and_workspace()
 
-        self.add_toyblocks()
+        # self.add_toyblocks()
         # self.add_challenging(self.scene_generator,
         #                      test_preset_file='../assets/test-cases/challenging_scene_8.txt')
+        # self.add_boxes()
+        self.add_tightly_packed_boxes()
 
         t = 0
         while t < 3000:
