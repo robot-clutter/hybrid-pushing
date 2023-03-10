@@ -237,13 +237,14 @@ class BulletEnv(Env):
         self.robot = None
 
         # Load toy blocks
-        toyblocks_root = '../assets/blocks/'
-        self.obj_files = []
-        for obj_file in os.listdir(toyblocks_root):
-            if not obj_file.endswith('.obj'):
-                continue
-            self.obj_files.append(os.path.join(toyblocks_root, obj_file))
-        print(self.obj_files)
+        if params["scene_generation"]["object_type"] == 'toyblocks':
+            toyblocks_root = '../assets/blocks/'
+            self.obj_files = []
+            for obj_file in os.listdir(toyblocks_root):
+                if not obj_file.endswith('.obj'):
+                    continue
+                self.obj_files.append(os.path.join(toyblocks_root, obj_file))
+            print(self.obj_files)
 
         # Number of obstacles
         self.nr_objects = params["scene_generation"]["nr_of_obstacles"]
