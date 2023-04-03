@@ -424,47 +424,178 @@ class PushEverywhere(MDP):
         return False
 
     def reward(self, obs, next_obs, action):
+        def target_moved_not_obstacles(obs, next_obs):
+            # print('target_moved:', target_moved(obs, next_obs))
+            # print('obstacles_moves:', obstacles_moved(obs, next_obs, eps=0.03))
+            if target_moved(obs, next_obs) and not obstacles_moved(obs, next_obs, eps=0.053):
+                return True
+            else:
+                return False
 
-        def get_obstacle_pxls_in_singulation_area(obs):
+        def target_moved(obs, next_obs):
+            fused_map = self.state_representation(obs)[1].squeeze()
+            target_goal_mask = np.zeros(fused_map.shape)
+            target_goal_mask[self.goal == 0] = 255
+
+            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            seg = cv2.resize(seg, fused_map.shape, interpolation=cv2.INTER_NEAREST)
+
+            next_seg = Feature(next_obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            next_seg = cv2.resize(next_seg, fused_map.shape, interpolation=cv2.INTER_NEAREST)
+
+            for x in obs['full_state']['objects']:
+                if x.name == 'target':
+                    target_mask = np.zeros(fused_map.shape)
+                    target_mask[seg == x.body_id] = 255
+
+                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
+                    target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
+
+                    overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
+                    # print(overlay_ratio)
+                    # fig, ax = plt.subplots(1, 3)
+                    # ax[0].imshow(target_goal_mask)
+                    # ax[1].imshow(target_mask)
+                    # ax[2].imshow(overlay)
+                    # plt.show()
+                    if overlay_ratio > 0.9:
+                        continue
+
+                    centroid = np.mean(np.argwhere(target_mask == 255), 0)
+                    centroid = np.array([centroid[1], centroid[0]])
+                    dist = np.linalg.norm(centroid - self.goal_centroid)
+
+                    next_target_mask = np.zeros((100, 100))
+                    next_target_mask[next_seg == x.body_id] = 255
+                    next_centroid = np.mean(np.argwhere(next_target_mask == 255), 0)
+                    next_centroid = np.array([next_centroid[1], next_centroid[0]])
+                    next_dist = np.linalg.norm(next_centroid - self.goal_centroid)
+
+                    # print(dist, next_dist)
+
+                    if dist - next_dist > 2:
+                        return True
+
+            return False
+
+        def get_obstacles_dists(obs, next_obs):
+
+            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
+
+            next_seg = Feature(next_obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            next_seg = cv2.resize(next_seg, (100, 100), interpolation=cv2.INTER_NEAREST)
+
+            goal_map = np.zeros(self.goal.shape)
+            goal_map[self.goal == 0] = 1
+
+            for x in obs['full_state']['objects']:
+                if x.name.split('_')[0] == 'obs':
+                    obst_mask = np.zeros((100, 100))
+                    obst_mask[seg == x.body_id] = 255
+                    centroid = np.mean(np.argwhere(obst_mask == 255), 0)
+                    centroid = np.array([centroid[1], centroid[0]])
+                    dist = np.linalg.norm(centroid - self.goal_centroid)
+
+                    next_obst_mask = np.zeros((100, 100))
+                    next_obst_mask[next_seg == x.body_id] = 255
+                    next_centroid = np.mean(np.argwhere(next_obst_mask == 255), 0)
+                    next_centroid = np.array([next_centroid[1], next_centroid[0]])
+                    next_dist = np.linalg.norm(next_centroid - self.goal_centroid)
+
+                    iou = len(np.argwhere(obst_mask * goal_map == 255))
+                    # print(dist, next_dist, iou)
+                    # if next_dist - dist > 5:
+                    #     fig, ax = plt.subplots(1, 4)
+                    #     ax[0].imshow(obst_mask)
+                    #     ax[1].imshow(next_obst_mask)
+                    #     ax[2].imshow(goal_map)
+                    #     ax[3].imshow(obst_mask * goal_map)
+                    #     plt.show()
+
+                    if iou > 0 and next_dist - dist > 5:
+                        # fig, ax = plt.subplots(1, 2)
+                        # ax[0].imshow(obst_mask)
+                        # ax[1].imshow(next_obst_mask)
+                        # plt.show()
+                        return True
+
+            return False
+
+        def obstacles_moved(obs, next_obs, eps=0.03):
+
+            for obj in obs['full_state']['objects']:
+                for next_obj in next_obs['full_state']['objects']:
+                    if obj.name != 'target' or obj.name != 'plane' or obj.name != 'table' or obj.pos[2] < 0:
+                        if obj.body_id == next_obj.body_id:
+                            dist = np.linalg.norm(obj.pos - next_obj.pos)
+                            if dist > eps:
+                                return True
+
+            return False
+
+        def targets_in_goal_area(obs, eps=0.9):
+            fused_map = self.state_representation(obs)[1].squeeze()
+
+            target_goal_mask = np.zeros(fused_map.shape)
+            target_goal_mask[self.goal == 0] = 255
+
+            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
+
+            for x in obs['full_state']['objects']:
+                if x.name == 'target' and x.pos[2] > 0:
+                    target_mask = np.zeros(fused_map.shape)
+                    target_mask[seg == x.body_id] = 255
+                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
+
+                    target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
+                    if target_mask_pxls == 0:
+                        return 0.0
+                    overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
+
+                    if overlay_ratio < eps:
+                        return False
+            return True
+
+        def obstacle_pxls_in_goal_area(obs):
+            singulation_area_pxl = 0.03 / 0.006
 
             fused_map = self.state_representation(obs)[1]
             obstacles_map = np.zeros(fused_map.shape)
             obstacles_map[fused_map == 122] = 1.0
-            singulation_area_pxl = 0.03 / 0.006
 
-            obstacles_in_singulation_area = obstacles_map * self.goal
-            obstacles_in_singulation_area[obstacles_in_singulation_area > singulation_area_pxl] = 0.0
-            obstacles_in_singulation_area[obstacles_in_singulation_area > 0.0] = 1.0
-
-            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
-            seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
-            no_of_objects_in_sing_area = np.unique((obstacles_in_singulation_area * seg).astype(np.uint8))
-            return len(no_of_objects_in_sing_area)
+            goal_map = np.zeros((self.goal.shape[0], self.goal.shape[1]))
+            goal_map[self.goal < singulation_area_pxl] = 255
+            obstacles_in_target_area = obstacles_map * goal_map
+            pxls_in_singulation_area = np.argwhere(obstacles_in_target_area > 0)
+            return len(pxls_in_singulation_area)
 
         if self.fallen(obs, next_obs):
             return 0
 
-        target_pos = next(x.pos for x in obs['full_state']['objects'] if x.name == 'target')
-        target_pos_n = next(x.pos for x in next_obs['full_state']['objects'] if x.name == 'target')
+        # is_target_moved = target_moved(obs, next_obs)
+        is_target_moved = target_moved_not_obstacles(obs, next_obs)
+        # print('target_moved:', is_target_moved)
 
-        for x in obs['full_state']['objects']:
-            if x.name == 'target':
-                for y in next_obs['full_state']['objects']:
-                    if y.body_id == x.body_id:
-                        dist = np.linalg.norm(x.pos[0:2] - self.goal_pos)
-                        dist_n = np.linalg.norm(y.pos[0:2] - self.goal_pos)
+        # obstacles_moved = get_obstacles_dists(obs, next_obs)
+        # print('obstacles_moved:', obstacles_moved)
 
-
-        dist = np.linalg.norm(target_pos[0:2] - self.goal_pos)
-        dist_n = np.linalg.norm(target_pos_n[0:2] - self.goal_pos)
-
-        no_of_obstacles = get_obstacle_pxls_in_singulation_area(obs)
-        no_of_obstacles_n = get_obstacle_pxls_in_singulation_area(next_obs)
+        # if self.target_singulated(next_obs):
+        #     return 1.0
+        # elif is_target_moved:
+        #     print('move a target towards the target area')
+        #     return 0.5
+        # elif obstacles_moved:
+        #     print('obstacles moved out of targets area')
+        #     return 0.5
+        # else:
+        #     return 0
 
         if self.target_singulated(next_obs):
-            return 1.0
-        elif dist - dist_n > 0.01:
-            # return   (dist - dist_n) / 0.1
+            return 2.0
+        elif is_target_moved:
+            print('target_moved')
             return 0.5
         elif (no_of_obstacles - no_of_obstacles_n > 0) and (dist - dist_n > -0.01):
             return 0.5
