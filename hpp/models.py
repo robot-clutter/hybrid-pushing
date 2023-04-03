@@ -477,6 +477,7 @@ class QFCN(Agent):
 
         random_action = np.array([p_1[0], p_1[1], discrete_angle])
         return random_action
+
     def explore(self, state):
         epsilon = self.params['epsilon_end'] + (self.params['epsilon_start'] - self.params['epsilon_end']) * \
                        math.exp(-1 * self.learn_step_counter / self.params['epsilon_decay'])
@@ -484,16 +485,26 @@ class QFCN(Agent):
         if self.rng.uniform(0, 1) >= epsilon:
             return self.predict(state)
 
-        if self.rng.rand() < self.params['push_target_prob']:
-            if self.rng.rand() < 0.5:
-                action = self.explore_push_target(state)
-                if action is None:
-                    return self.rng.randint((0, 0, 0), (100, 100, 16))
-            else:
-                if self.params['goal']:
-                    action = self.explore_push_obstacle(state)
-                else:
-                    action = self.explore_push_obstacle_around_target(state)
+        action = self.rng.randint((0, 0, 0), (100, 100, 16))
+
+        # # action = self.explore_push_obstacle(state)
+        # if self.params['goal'] and self.rng.rand() < self.params['push_target_prob']:
+        #     if self.rng.rand() < 0.5:
+        #         print('Guided exploration')
+        #         action = self.explore_push_target(state)
+        #         if action is None:
+        #             return self.rng.randint((0, 0, 0), (100, 100, 16))
+        #     else:
+        #         if self.params['goal']:
+        #             action = self.explore_push_obstacle(state)
+        #         else:
+        #             print('Guided exploration')
+        #             action = self.explore_push_obstacle_around_target(state)
+        # else:
+        #     action = self.rng.randint((0, 0, 0), (100, 100, 16))
+
+        if self.params['goal'] and self.rng.rand() < 0.5:
+            action = self.explore_around_objects(state)
         else:
             action = self.rng.randint((0, 0, 0), (100, 100, 16))
 
