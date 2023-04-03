@@ -385,6 +385,9 @@ class QFCN(Agent):
         small_target_dilated_mask = cv2.dilate(target_mask, np.ones((5, 5), np.uint8), iterations=1)
         valid_push_target_pxls = Feature(target_mask_dilated).mask_out(small_target_dilated_mask).array() * obstacles_map
 
+        # plt.imshow(valid_push_target_pxls)
+        # plt.show()
+
         ids = np.argwhere(valid_push_target_pxls > 0)
         if len(ids) == 0:
             return None
@@ -405,9 +408,39 @@ class QFCN(Agent):
         return random_action
 
     def explore_push_obstacle(self, state):
-        ids = np.argwhere(state[2] < 10)
+        obstacles_map = np.zeros(state[0].shape)
+        obstacles_map[state[1] == 122] = 1
+
+        goal_pos = np.argwhere(state[2] == 0)
+        radius = (np.max(goal_pos[:, 1]) - np.min(goal_pos[:, 1])) / 2
+        goal_map = np.zeros(state[2].shape)
+        goal_map[state[2] == 0] = 255
+        obstacles_in_target_area = obstacles_map * goal_map
+
+        pos_map = np.zeros(state[0].shape)
+        pos_map[state[2] == 0] = 255
+        pos_map[obstacles_in_target_area == 255] = 0
+
+        ids = np.argwhere(pos_map == 255)
         k = self.rng.randint(0, len(ids))
-        random_action = np.array([ids[k][1], ids[k][0], np.random.randint(0, 15)])
+        p_1 = np.array([ids[k][1], ids[k][0]])
+
+        p2_ids = np.argwhere(obstacles_in_target_area == 255)
+
+        if len(p2_ids) > 0:
+            k = self.rng.randint(0, len(p2_ids))
+            p_2 = np.array([p2_ids[k][1], p2_ids[k][0]])
+
+            direction = (p_2 - p_1) / np.linalg.norm(p_2 - p_1)
+            direction[1] *= -1  # go to inertia frame
+            theta = np.arctan2(direction[1], direction[0])
+            if theta < 0:
+                theta += 2 * np.pi
+            discrete_angle = int((theta / (2 * np.pi)) * 16)
+        else:
+            discrete_angle = np.random.randint(0, 15)
+
+        random_action = np.array([p_1[0], p_1[1], discrete_angle])
         return random_action
 
     def explore_push_obstacle_around_target(self, state):
