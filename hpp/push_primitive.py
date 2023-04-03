@@ -10,10 +10,10 @@ from math import cos, sin
 import numpy as np
 import copy
 
-from clutter.util.orientation import Quaternion, Affine3, transform_points
-from clutter.util.math import min_max_scale, ConvexHull, LineSegment2D
-from clutter.util.viz import plot_square
-from clutter.util.cv_tools import PinholeCameraIntrinsics, calc_m_per_pxl
+from hpp.util.orientation import Quaternion, Affine3, transform_points
+from hpp.util.math import min_max_scale, ConvexHull, LineSegment2D
+from hpp.util.viz import plot_square
+from hpp.util.cv_tools import PinholeCameraIntrinsics, calc_m_per_pxl
 import matplotlib.patches as patches
 
 import cv2

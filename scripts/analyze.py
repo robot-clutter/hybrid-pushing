@@ -1,12 +1,9 @@
 import os
-
-import numpy as np
-from clutter.core import train
-from clutter.env import BulletEnv, UR5Bullet
-import yaml
-from clutter.core import analyze_data
 import matplotlib.pyplot as plt
-import clutter.util.info as info
+import numpy as np
+
+from hpp.core import analyze_data
+import hpp.util.info as info
 
 
 def analyze_actions(env_dir, bins=5, tmax=15):
