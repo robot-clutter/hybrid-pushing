@@ -147,22 +147,30 @@ class PushEverywhere(MDP):
             target_mask[fused_map == 255] = 255
             target_mask_dilated = cv2.dilate(target_mask, np.ones((15, 15), np.uint8), iterations=1)
 
-            obstacles_mask = np.zeros(fused_map.shape).astype(np.uint8)
-            obstacles_mask[fused_map == 122] = 255
-            target_mask_dilated += obstacles_mask
+            # target_mask = np.zeros(fused_map.shape).astype(np.uint8)
+            # target_mask[fused_map == 255] = 255
+            # target_mask_dilated = cv2.dilate(target_mask, np.ones((15, 15), np.uint8), iterations=1)
+            #
+            # obstacles_mask = np.zeros(fused_map.shape).astype(np.uint8)
+            # obstacles_mask[fused_map == 122] = 255
+            # target_mask_dilated += obstacles_mask
 
-            pxls_no_target = np.argwhere(target_mask_dilated == 0)
+            objects_mask = np.zeros(fused_map.shape).astype(np.uint8)
+            objects_mask[fused_map > 0] = 255
+            objects_mask_dilated = cv2.dilate(objects_mask, np.ones((30, 30), np.uint8), iterations=1)
+
+            pxls_no_target = np.argwhere(objects_mask_dilated == 0)
             filetered_pxls = []
             for pxl in pxls_no_target:
                 if (18 < pxl[0] < 82) and (18 < pxl[1] < 82):
                     filetered_pxls.append(pxl)
 
             i = self.rng.choice(range(0, len(filetered_pxls)))
-            goal_centroid = np.array([filetered_pxls[i][1], filetered_pxls[i][0]])
+            self.goal_centroid = np.array([filetered_pxls[i][1], filetered_pxls[i][0]])
         else:
-            goal_centroid = self.compute_free_space(obs)
+            self.goal_centroid = self.compute_free_space(obs)
 
-        self.set_goal(goal_centroid, obs)
+        self.set_goal(self.goal_centroid, obs)
 
     def set_goal(self, pxl, obs):
         """
