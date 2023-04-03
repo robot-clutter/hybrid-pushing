@@ -523,7 +523,7 @@ class BulletEnv(Env):
         seg = self.get_obs()['seg']
         seg = Feature(seg).crop(crop_size, crop_size).array()
 
-        safe_bound = 100
+        safe_bound = 150
         bounds = [seg.shape[0] - safe_bound, seg.shape[1] - safe_bound]
         pixx = [self.rng.randint(safe_bound, bounds[0]), self.rng.randint(safe_bound, bounds[1])]
 
@@ -531,7 +531,7 @@ class BulletEnv(Env):
         theta = 0
 
         for x in range(grid[0]):
-            for y in range(grid[1]):
+            for y in range(grid[1]-1):
                 i = x + y*grid[0]
                 body_id = self.add_single_box(objects[i])
                 p.removeBody(body_id)
