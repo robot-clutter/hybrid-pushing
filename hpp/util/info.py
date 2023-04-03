@@ -7,7 +7,7 @@ import time
 import yaml
 import pickle
 import shutil
-
+import re
 
 def get_pc_and_version():
     '''Returns current PC's hostname, username and code's current version.'''
@@ -85,35 +85,23 @@ def transform_sec_to_timestamp(seconds):
     return "{:0>2}h:{:0>2}m:{:05.2f}s".format(int(hours),int(minutes),seconds)
 
 class Logger:
-    def __init__(self, dir_name=None, check_exist=True, reply_=None):
-        self.logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'logs'))
-        # Create logging directory
-        hostname, username, version, pid = get_pc_and_version()
-        started_on = str(datetime.now())
-        if dir_name is None:
-            dir_name = 'clutter_' + hostname + '_' + get_now_timestamp()
-        self.log_dir = os.path.join(self.logs_dir, dir_name)
-        if os.path.exists(self.log_dir) and check_exist:
-            if reply_ is None:
-                reply = input('Path ' + self.log_dir + ' already exists.\nRemove it completely? (y/p/n) > ')
-            else:
-                reply = reply_
-            if reply == 'y':
-                shutil.rmtree(self.log_dir)
-            elif reply == 'p':
+    def __init__(self, log_dir):
+        self.log_dir = log_dir
+
+        # Create the log directory
+        if os.path.exists(log_dir):
+            print('Directory ', log_dir, 'exists, do you want to remove it? (y/p/n)')
+            answer = input('')
+            if answer == 'y':
+                shutil.rmtree(log_dir)
+                os.mkdir(log_dir)
+            elif answer == 'p':
                 pass
             else:
-                print('Logger: Exiting.')
                 exit()
 
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
-        self.exp_info = {'hostname': hostname, 'username': username, 'version': version, 'pid': pid,
-                         'started_on': started_on, 'log_dir': self.log_dir}
-        self.start_time = time.time()
-        with open(os.path.join(self.log_dir, 'exp_info.yml'), 'w') as stream:
-            yaml.dump(self.exp_info, stream)
-        print('Log Directory: ', self.log_dir)
 
     def log_data(self, data, filename):
         pickle.dump(data, open(os.path.join(self.log_dir, filename), 'wb'))
@@ -123,9 +111,10 @@ class Logger:
             yaml.dump(dict, stream)
 
     def update(self):
-        self.exp_info['dir_size'] = get_dir_size(self.log_dir)
-        self.exp_info['time_elapsed'] = transform_sec_to_timestamp(time.time() - self.start_time)
-        self.log_yml(self.exp_info, 'exp_info')
+        # self.exp_info['dir_size'] = get_dir_size(self.log_dir)
+        # self.exp_info['time_elapsed'] = transform_sec_to_timestamp(time.time() - self.start_time)
+        # self.log_yml(self.exp_info, 'exp_info')
+        pass
 
 
 class bcolors:
@@ -148,3 +137,14 @@ def warn(*args):
 
 def error(*args):
     print(bcolors.FAIL + bcolors.BOLD + "ERROR: " + " ".join(map(str, args)) + bcolors.ENDC)
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
