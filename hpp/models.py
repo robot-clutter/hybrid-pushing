@@ -344,11 +344,16 @@ class QFCN(Agent):
                 prediction_vis = min_max_scale(out_prob[0][i], range=(min_prob, max_prob), target_range=(0, 1))
                 best_pt = np.unravel_index(prediction_vis.argmax(), prediction_vis.shape)
                 maximum_prob = np.max(out_prob[0][i])
-
-                ax[x, y].imshow(state[1], cmap='gray')
                 goal_pos = np.argwhere(state[2] == 0)
+
                 goal_centroid = np.mean(goal_pos, axis=0)
-                ax[x, y].plot(goal_centroid[1], goal_centroid[0], 'bx')
+
+                radius = (np.max(goal_pos[:, 1]) - np.min(goal_pos[:, 1])) / 2
+
+                circle = plt.Circle((goal_centroid[1], goal_centroid[0]), radius, color='b', fill=False)
+                ax[x, y].add_patch(circle)
+                ax[x, y].imshow(state[1], cmap='gray')
+                # ax[x, y].plot(goal_centroid[1], goal_centroid[0], 'bx')
                 ax[x, y].imshow(prediction_vis, alpha=0.5)
                 ax[x, y].set_title(str(i) + ', ' + str(format(maximum_prob, ".3f")))
 
@@ -360,8 +365,8 @@ class QFCN(Agent):
                 dy = -20 * np.sin((i / 16) * 2 * np.pi)
                 ax[x, y].arrow(best_pt[1], best_pt[0], dx, dy, width=2, color='g')
 
-            # plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'),
-            #             dpi=720)
+            plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map_' + str(self.learn_step_counter) + '.png'),
+                        dpi=720)
             plt.savefig(os.path.join(self.params['log_dir'], 'maps', 'map.png'),
                         dpi=720)
             plt.close()
