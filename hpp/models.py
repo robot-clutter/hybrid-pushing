@@ -522,13 +522,13 @@ class QFCN(Agent):
     def learn(self, transition):
         q_value = self.update(transition, backprop=False)
 
-        if transition.reward == 1.0:
+        if transition.reward == 2.0:
             self.counter_success += 1
         print('Counter_successes:', self.counter_success)
         # Store transition to the replay buffer
         self.replay_buffer.store(transition, q_value)
 
-        sample_reward_value = random.choice([0.0, 0.5, 1.0])
+        sample_reward_value = random.choice([-1.0, 0.0, 0.5, 2.0])
 
         # Sample a batch from the replay buffer
         sampled_transition, sample_id = self.replay_buffer.sample(sample_reward_value)
