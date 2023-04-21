@@ -399,34 +399,62 @@ class PushEverywhere(MDP):
         return mask, mask_centroid
 
     def target_singulated(self, obs):
-        def get_overlay(obs):
+        def get_overlay(obs, eps=0.6):
             fused_map = self.state_representation(obs)[1].squeeze()
-            target_mask = np.zeros(fused_map.shape).astype(np.uint8)
-            target_mask[fused_map == 255] = 255
 
             target_goal_mask = np.zeros(fused_map.shape)
             target_goal_mask[self.goal == 0] = 255
-            overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
 
-            target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
-            if target_mask_pxls == 0:
-                return 0.0
-            overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
+            seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+            seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
 
-            return overlay_ratio
+            for x in obs['full_state']['objects']:
+                if x.name == 'target' and x.pos[2] > 0:
+                    target_mask = np.zeros(fused_map.shape)
+                    target_mask[seg == x.body_id] = 255
+                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
 
-        iou = get_overlay(obs)
+                    target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
+                    if target_mask_pxls == 0:
+                        return 0.0
+                    overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
+
+                    # print('overlay:', overlay_ratio)
+                    # fig, ax = plt.subplots(1, 3)
+                    # ax[0].imshow(target_mask)
+                    # ax[1].imshow(target_goal_mask)
+                    # ax[2].imshow(overlay)
+                    # plt.show()
+
+                    if overlay_ratio < eps:
+                        return False
+            return True
+
+        is_singulated = get_overlay(obs)
+
+        singulation_area_pxl = 0.03 / 0.006
 
         fused_map = self.state_representation(obs)[1]
         obstacles_map = np.zeros(fused_map.shape)
         obstacles_map[fused_map == 122] = 1.0
 
-        singulation_area_pxl = 0.03 / 0.006
-        obstacles_in_singulation_area = obstacles_map * self.goal
-        obstacles_in_singulation_area[obstacles_in_singulation_area > singulation_area_pxl] = 0.0
-        pxls_in_singulation_area = np.argwhere(obstacles_in_singulation_area > 0)
+        goal_map = np.zeros((self.goal.shape[0], self.goal.shape[1]))
+        goal_map[self.goal < singulation_area_pxl] = 255
+        obstacles_in_target_area = obstacles_map * goal_map
+        pxls_in_singulation_area = np.argwhere(obstacles_in_target_area > 0)
+        # print('obstacle pxls in target area:', len(pxls_in_singulation_area))
 
-        if (len(pxls_in_singulation_area) == 0) and (iou > 0.9):
+        # fig, ax = plt.subplots(1, 3)
+        # ax[0].imshow(obstacles_map)
+        # ax[1].imshow(self.goal)
+        # ax[2].imshow(obstacles_map * goal_map)
+        # plt.show()
+
+        # print(singulation_area_pxl)
+        # obstacles_in_singulation_area = obstacles_map * self.goal
+        # obstacles_in_singulation_area[obstacles_in_singulation_area > singulation_area_pxl] = 0.0
+
+        if (len(pxls_in_singulation_area) == 0) and is_singulated:
             return True
         return False
 
