@@ -21,15 +21,25 @@ env:
       width: 640
       height: 480
   scene_generation:
+    all_equal_height_prob: 1.0
     target:
+      min_bounding_box: [ .03, .03, .03 ]
+      max_bounding_box: [ .03, .03, .03 ]
+      probability_box: 1.0
+      enforce_convex_hull: 15
       randomize_pos: True
+    obstacle:
+      min_bounding_box: [ .03, .03, .03 ]
+      max_bounding_box: [ .03, .03, .03 ]
+      probability_box: 1.0
+      pushable_threshold_coeff: -0.5 # Set -0.5 by default or 1 if standalone push obstacle
     nr_of_obstacles:
-      - 8
-      - 13
+      - 5
+      - 5
     hug:
       probability: 1  # Probability of hugging
       radius: 0.2  # radius within the object lies
-    object_type: 'toyblocks'  # 'boxes' or 'toyblocks'
+    object_type: 'boxes'  # 'boxes' or 'toyblocks'
 
 mdp:
   singulation_distance: 0.03
