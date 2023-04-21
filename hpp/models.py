@@ -314,6 +314,11 @@ class QFCN(Agent):
         self.replay_buffer.seed(seed)
 
     def predict(self, state, plot=True):
+        # fig, ax = plt.subplots(1, 3)
+        # ax[0].imshow(state[0])
+        # ax[1].imshow(state[1])
+        # ax[2].imshow(state[2])
+        # plt.show()
         depth, seg, goal = self.preprocess_state(state)
         q_maps = self.fcn(depth_heightmap=depth, seg_heightmap=seg, goal_heightmap=goal, is_volatile=True)
         out_prob = self.post_process(q_maps)
