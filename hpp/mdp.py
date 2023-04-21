@@ -632,8 +632,6 @@ class PushEverywhere(MDP):
         elif is_target_moved:
             print('target_moved')
             return 0.5
-        elif (no_of_obstacles - no_of_obstacles_n > 0) and (dist - dist_n > -0.01):
-            return 0.5
         else:
             return 0
 
