@@ -461,7 +461,7 @@ class QFCN(Agent):
         objects_mask = np.zeros(state[0].shape)
         objects_mask[state[0] > 0] = 255
 
-        kernel = np.ones((15, 15), np.uint8)
+        kernel = np.ones((20, 20), np.uint8)
         dilated_mask = cv2.dilate(objects_mask, kernel, iterations=1)
         diff_mask = dilated_mask - objects_mask
 
