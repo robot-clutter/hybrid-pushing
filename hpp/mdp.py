@@ -305,13 +305,8 @@ class PushEverywhere(MDP):
         mask[seg == target_id] = 255
 
         # In case the target is singulated or falls of the table the episode is singulated
-        # ToDo: end the episode for maximum number of pushes
-        target = next(x for x in next_obs['full_state']['objects'] if x.name == 'target')
-
-        for x in next_obs['full_state']['objects']:
-            if x.name == 'target':
-                if x.pos[2] < 0:
-                    return 3
+        if self.fallen(obs, next_obs):
+            return 3
 
         if self.empty(obs, next_obs):
             return -1
@@ -323,27 +318,27 @@ class PushEverywhere(MDP):
 
     def fallen(self, obs, next_obs):
 
-        for x in next_obs['full_state']['objects']:
-            if x.name == 'target':
-                if x.pos[2] < 0:
-                    return True
-        return False
+        # for x in next_obs['full_state']['objects']:
+        #     if x.name == 'target':
+        #         if x.pos[2] < 0:
+        #             return True
+        # return False
 
-        # current_fallen = []
-        # for obj in obs['full_state']['objects']:
-        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
-        #         current_fallen.append(obj.name)
-        #
-        # next_fallen = []
-        # for obj in next_obs['full_state']['objects']:
-        #     if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
-        #         next_fallen.append(obj.name)
-        #
-        # # print(current_fallen, next_fallen)
-        # if len(next_fallen) > len(current_fallen):
-        #     return True
-        # else:
-        #     return False
+        current_fallen = []
+        for obj in obs['full_state']['objects']:
+            if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
+                current_fallen.append(obj.name)
+
+        next_fallen = []
+        for obj in next_obs['full_state']['objects']:
+            if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] < 0:
+                next_fallen.append(obj.name)
+
+        # print(current_fallen, next_fallen)
+        if len(next_fallen) > len(current_fallen):
+            return True
+        else:
+            return False
 
     def empty(self, obs, next_obs, eps=0.005):
         """
