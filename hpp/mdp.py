@@ -226,11 +226,6 @@ class PushEverywhere(MDP):
         self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]), (-SURFACE_SIZE, SURFACE_SIZE))
         self.goal_pos[1] = -min_max_scale(goal_centroid[1], (0, self.crop_table[1]), (-SURFACE_SIZE, SURFACE_SIZE))
 
-        self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]),
-                                             (-SURFACE_SIZE, SURFACE_SIZE))
-        self.goal_pos[1] = -min_max_scale(goal_centroid[1], (0, self.crop_table[1]),
-                                              (-SURFACE_SIZE, SURFACE_SIZE))
-
     def compute_free_space(self, obs):
         # Compute free space map
         fused_map = self.state_representation(obs)[1]
