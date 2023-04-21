@@ -271,8 +271,8 @@ class PushEverywhere(MDP):
         rgb, depth, seg = obs['rgb'], obs['depth'], obs['seg']
 
         heightmap = get_heightmap(obs)
-        heightmap[heightmap < 0] = 0  # Set negatives (everything below table) the same as the table in order to
-                                      # properly translate it
+        heightmap[heightmap < 0.002] = 0  # Set negatives (everything below table) the same as the table in order to
+                                          # properly translate it
         heightmap = Feature(heightmap).crop(CROP_TABLE, CROP_TABLE).array()
         heightmap = cv2.resize(heightmap, (100, 100), interpolation=cv2.INTER_NEAREST)
 
