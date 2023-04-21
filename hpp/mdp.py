@@ -143,9 +143,6 @@ class PushEverywhere(MDP):
     def reset_goal(self, obs):
         if self.random_goal:
             fused_map = self.state_representation(obs)[1]
-            target_mask = np.zeros(fused_map.shape).astype(np.uint8)
-            target_mask[fused_map == 255] = 255
-            target_mask_dilated = cv2.dilate(target_mask, np.ones((15, 15), np.uint8), iterations=1)
 
             # target_mask = np.zeros(fused_map.shape).astype(np.uint8)
             # target_mask[fused_map == 255] = 255
@@ -183,20 +180,32 @@ class PushEverywhere(MDP):
         target_mask = np.zeros(fused_map.shape).astype(np.uint8)
         target_mask[fused_map == 255] = 255
 
-        contours, _ = cv2.findContours(target_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        seg = Feature(obs['seg']).crop(CROP_TABLE, CROP_TABLE).array()
+        seg = cv2.resize(seg, (100, 100), interpolation=cv2.INTER_NEAREST)
+        # plt.imshow(seg)
+        # plt.show()
 
         radius = 0
-        for cnt in contours:
-            points = []
-            for pnt in cnt:
-                points.append(np.array([pnt[0, 0], pnt[0, 1]]))
-            points = np.asarray(points)
-            y_min = np.min(points[:, 0])
-            y_max = np.max(points[:, 0])
-            x_min = np.min(points[:, 1])
-            x_max = np.max(points[:, 1])
-            radius += np.sqrt(np.power(y_max - y_min, 2) + np.power(x_max - x_min, 2)) / 2.0
+        for x in obs['full_state']['objects']:
+            if x.name == 'target' and x.pos[2] > 0:
+                target_ids = np.argwhere(seg == x.body_id)
+                # print(len(target_ids))
+                y_min = np.min(target_ids[:, 0])
+                y_max = np.max(target_ids[:, 0])
+                x_min = np.min(target_ids[:, 1])
+                x_max = np.max(target_ids[:, 1])
+                # print(np.sqrt(np.power(y_max - y_min, 2) + np.power(x_max - x_min, 2)) / 2.0)
+                radius += np.sqrt(np.power(y_max - y_min, 2) + np.power(x_max - x_min, 2)) / 2.0
 
+                # radius += min(y_max - y_min, x_max - x_min) / 2.0
+                # p_1 = target_ids[np.argmin(target_ids[:, 1])]
+                # p_2 = target_ids[np.argmax(target_ids[:, 1])]
+                # print(np.linalg.norm(p_2 - p_1) / 2)
+                # radius += np.linalg.norm(p_2 - p_1) / 2
+
+        self.radius = radius
+
+        # input('')
         x = np.linspace(0, fused_map.shape[0] - 1, fused_map.shape[0])
         y = np.linspace(0, fused_map.shape[1] - 1, fused_map.shape[1])
         xv, yv = np.meshgrid(x, y)
@@ -214,8 +223,8 @@ class PushEverywhere(MDP):
 
         self.goal = positional_map.copy()
 
-        plt.imshow(self.goal)
-        plt.show()
+        self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]), (-SURFACE_SIZE, SURFACE_SIZE))
+        self.goal_pos[1] = -min_max_scale(goal_centroid[1], (0, self.crop_table[1]), (-SURFACE_SIZE, SURFACE_SIZE))
 
         self.goal_pos[0] = min_max_scale(goal_centroid[0], (0, self.crop_table[0]),
                                              (-SURFACE_SIZE, SURFACE_SIZE))
