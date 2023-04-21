@@ -267,13 +267,17 @@ class BulletEnv(Env):
 
         self.rng = np.random.RandomState()
 
-    def visualize_goal(self, goal=np.array([0, 0])):
+    def visualize_goal(self, obs, goal=np.array([0, 0])):
+
+        target_size = next(x.size for x in obs['full_state']['objects'] if x.name == 'target')
+        target_radius = math.sqrt(target_size[0]**2 + target_size[1]**2)
+
         visual_shape_id = p.createVisualShape(shapeType=p.GEOM_CYLINDER,
-                                              radius=0.05,
+                                              radius=target_radius,
                                               length=0.001,
                                               rgbaColor=[0, 0, 0, 1])
 
-        base_position, base_orientation = self.workspace2world(pos=np.array([goal[0], goal[1], 0.00001]),
+        base_position, base_orientation = self.workspace2world(pos=[goal[0], goal[1], 0.00001],
                                                                quat=Quaternion())
         base_orientation = base_orientation.as_vector("xyzw")
         body_id = p.createMultiBody(baseVisualShapeIndex=visual_shape_id,
