@@ -383,7 +383,7 @@ class PushEverywhere(MDP):
         p1 = np.array([x1, y1, depth_heigthmap[y, x] + 0.01])
         print(p1)
 
-        push_distance = 0.15
+        push_distance = 0.1
         direction = np.array([np.cos(theta), np.sin(theta), 0])
         p2 = p1 + push_distance * direction
         print(p2)
