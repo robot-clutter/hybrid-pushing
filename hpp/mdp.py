@@ -280,7 +280,7 @@ class PushEverywhere(MDP):
         # target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
 
         for x in obs['full_state']['objects']:
-            if x.name == 'target':
+            if x.name == 'target' and x.pos[2]:
                 mask[seg == x.body_id] = 255
 
         # mask[seg == target_id] = 255
