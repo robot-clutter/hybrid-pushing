@@ -550,7 +550,7 @@ class BulletEnv(Env):
 
                 objects[i].pos = pos
                 objects[i].quat = quat
-                objects_dist_from_center[i] = numpy.linalg.norm(pos)
+                objects_dist_from_center[i] = np.linalg.norm(pos)
 
         target_id = np.argmin(objects_dist_from_center)
         for i in range(len(objects)):
