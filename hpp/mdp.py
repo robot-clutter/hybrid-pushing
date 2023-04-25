@@ -458,11 +458,11 @@ class PushEverywhere(MDP):
             return True
         return False
 
-    def reward(self, obs, next_obs, action):
+    def reward(self, obs, next_obs, action, init_obs):
         def target_moved_not_obstacles(obs, next_obs):
             # print('target_moved:', target_moved(obs, next_obs))
             # print('obstacles_moves:', obstacles_moved(obs, next_obs, eps=0.03))
-            if target_moved(obs, next_obs) and not obstacles_moved(obs, next_obs, eps=0.053):
+            if target_moved(obs, next_obs) and not obstacles_moved(obs, next_obs, eps=0.03):
                 return True
             else:
                 return False
@@ -609,28 +609,14 @@ class PushEverywhere(MDP):
         if self.fallen(obs, next_obs):
             return 0
 
-        # is_target_moved = target_moved(obs, next_obs)
-        is_target_moved = target_moved_not_obstacles(obs, next_obs)
-        # print('target_moved:', is_target_moved)
-
-        # obstacles_moved = get_obstacles_dists(obs, next_obs)
-        # print('obstacles_moved:', obstacles_moved)
-
-        # if self.target_singulated(next_obs):
-        #     return 1.0
-        # elif is_target_moved:
-        #     print('move a target towards the target area')
-        #     return 0.5
-        # elif obstacles_moved:
-        #     print('obstacles moved out of targets area')
-        #     return 0.5
-        # else:
-        #     return 0
+        is_target_moved = False
+        if target_moved(obs, next_obs) and not obstacles_moved(init_obs, next_obs, eps=0.05):
+            is_target_moved = True
 
         if self.target_singulated(next_obs):
             return 2.0
         elif is_target_moved:
-            print('target_moved')
+            print('target moved but no obstacle')
             return 0.5
         else:
             return 0

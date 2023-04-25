@@ -39,6 +39,8 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
         while not mdp.init_state_is_valid(obs):
             obs = env.reset()
 
+    init_obs = copy.deepcopy(obs)
+
     observations.append(copy.deepcopy(obs))
 
     if goal:
@@ -77,8 +79,8 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
         observations.append(copy.deepcopy(next_obs))
 
         # Calculate reward from environment state
-        reward = mdp.reward(obs, next_obs, action)
-        print('reward:', reward)
+        reward = mdp.reward(obs, next_obs, action, init_obs)
+        print('REWARD:', reward)
 
         # Calculate terminal state
         terminal_id = mdp.terminal(obs, next_obs)
