@@ -286,10 +286,10 @@ class PushEverywhere(MDP):
         fused_heightmap[heightmap > 0] = 122
         fused_heightmap[mask == 255] = 255
 
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(heightmap)
-        ax[1].imshow(fused_heightmap.squeeze())
-        plt.show()
+        # fig, ax = plt.subplots(1, 2)
+        # ax[0].imshow(heightmap)
+        # ax[1].imshow(fused_heightmap.squeeze())
+        # plt.show()
 
         return heightmap, fused_heightmap.squeeze(), self.goal
 
