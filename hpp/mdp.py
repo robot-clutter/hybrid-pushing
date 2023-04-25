@@ -399,7 +399,7 @@ class PushEverywhere(MDP):
         return mask, mask_centroid
 
     def target_singulated(self, obs):
-        def get_overlay(obs, eps=0.6):
+        def get_overlay(obs, eps=0.5):
             fused_map = self.state_representation(obs)[1].squeeze()
 
             target_goal_mask = np.zeros(fused_map.shape)
