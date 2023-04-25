@@ -45,7 +45,7 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
 
     if goal:
         mdp.reset_goal(obs)
-        # env.visualize_goal(mdp.goal_pos)
+        env.visualize_goal(obs, mdp.goal_pos)
 
     agent.last_action_was_empty = 0
 
