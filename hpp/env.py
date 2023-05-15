@@ -871,3 +871,25 @@ class BulletEnv(Env):
             obj.pos, obj.quat = self.workspace2world(pos=np.array(pos),
                                                      quat=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3]),
                                                      inv=True)
+
+    def update_target(self, obs, goal_pos):
+        target_id = next(x.body_id for x in obs['full_state']['objects'] if x.name == 'target')
+        p.removeBody(target_id)
+
+        updated_objects = []
+        dists = {}
+        for obj in obs['full_state']['objects']:
+            if obj.name == 'target':
+                continue
+            updated_objects.append(obj)
+            if obj.name != 'plane' and obj.name != 'table' and obj.pos[2] > 0:
+                dists[obj.name] = np.linalg.norm(obj.pos[0:2] - goal_pos)
+
+        closest_obstacle = min(dists, key=dists.get)
+        for obj in updated_objects:
+            if obj.name == closest_obstacle:
+                obj.name = 'target'
+                p.changeVisualShape(obj.body_id, -1, rgbaColor=[1, 0, 0, 1])
+
+        self.objects = updated_objects
+        return self.get_obs()
