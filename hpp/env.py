@@ -189,7 +189,12 @@ class CameraBullet(Camera):
         image = p.getCameraImage(self.width, self.height,
                                  self.view_matrix, self.projection_matrix,
                                  flags=p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX)
-        return image[2], self.get_depth(image[3]), image[4]
+
+        rgb = np.reshape(image[2], [self.height, self.width, 4])[:, :, 0:3]
+        depth = self.get_depth(np.reshape(image[3], [self.height, self.width]))
+        seg = np.reshape(image[4], [self.height, self.width])
+
+        return rgb, depth, seg
 
     def get_intrinsics(self):
         """
