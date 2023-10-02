@@ -412,7 +412,7 @@ class PushEverywhere(MDP):
                 if x.name == 'target' and x.pos[2] > 0:
                     target_mask = np.zeros(fused_map.shape)
                     target_mask[seg == x.body_id] = 255
-                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
+                    overlay = 255 * (target_mask.astype(np.bool_) & target_goal_mask.astype(np.bool_)).astype(np.uint8)
 
                     target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
                     if target_mask_pxls == 0:
@@ -483,7 +483,7 @@ class PushEverywhere(MDP):
                     target_mask = np.zeros(fused_map.shape)
                     target_mask[seg == x.body_id] = 255
 
-                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
+                    overlay = 255 * (target_mask.astype(np.bool_) & target_goal_mask.astype(np.bool_)).astype(np.uint8)
                     target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
 
                     overlay_ratio = np.count_nonzero(overlay) / target_mask_pxls
@@ -582,7 +582,7 @@ class PushEverywhere(MDP):
                 if x.name == 'target' and x.pos[2] > 0:
                     target_mask = np.zeros(fused_map.shape)
                     target_mask[seg == x.body_id] = 255
-                    overlay = 255 * (target_mask.astype(np.bool) & target_goal_mask.astype(np.bool)).astype(np.uint8)
+                    overlay = 255 * (target_mask.astype(np.bool_) & target_goal_mask.astype(np.bool_)).astype(np.uint8)
 
                     target_mask_pxls = np.argwhere(target_mask == 255).shape[0]
                     if target_mask_pxls == 0:
@@ -714,3 +714,10 @@ class PushEverywhereEval(PushEverywhere):
             return 2
 
         return 0
+
+
+# class PushEverywhereMultipleTargetsEval(PushEverywhere):
+#     def select_target(self, obs):
+#     #
+#     #
+#     # def terminal(self, obs, next_obs):
