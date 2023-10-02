@@ -1,0 +1,72 @@
+env:
+  render: True
+  workspace:
+    walls: False
+    pos: [-0.614, 0, 0]
+    quat:
+      w: 0.7071232
+      x: 0.0
+      y: 0.0
+      z: 0.707904
+    size: [0.5, 0.5]
+  camera:
+    pos: [0.0, 0.0, 0.6]
+    target_pos: [.0, 0.0, 0.0]
+    up_vector: [0.0, 1.0, 0.0]
+    intrinsics:
+      fx: 463
+      fy: 463
+      cx: 320
+      cy: 240
+      width: 640
+      height: 480
+  scene_generation:
+    target:
+      randomize_pos: False
+    nr_of_obstacles:
+      - 8
+      - 13
+    hug:
+      probability: 1  # Probability of hugging
+      radius: 0.2  # radius within the object lies
+    object_type: 'toyblocks'  # 'boxes' or 'toyblocks'
+
+mdp:
+  singulation_distance: 0.03
+  nr_primitives: 2
+  push:
+    distance: [ 0.03, 0.15 ]
+    predict_collision: True
+    obstacle_avoid: True
+
+
+agent:
+  replay_buffer_size: 1000000
+  init_replay_buffer_size: 1000
+  batch_size: 32
+  discount: 0.9
+  tau: 0.999
+  double_dqn: False
+  epsilon_start: 0.9
+  epsilon_end: 0.05
+  epsilon_decay: 20000  # number of learning steps for half epsilon, set to 0 if no decay is needed
+
+  noise:
+    name: Normal
+    sigma: 0.2
+
+  autoencoder:
+    model_weights: '../models/ae/model.pth'
+    normalizer: '../models/ae/feature_normalizer.pkl'
+    device: 'cuda'
+
+  actor:
+    hidden_units: [ 400, 300 ]
+    learning_rate: 0.001
+    preactivation_weight: 0.05
+
+  critic:
+    hidden_units: [ 400, 300 ]
+    learning_rate: 0.001
+
+  device: 'cuda'
