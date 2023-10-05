@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 import hrl
+import analyze
 
 import argparse
 import yaml
@@ -55,6 +56,12 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
         # Transform observation from env (e.g. RGBD, mask) to state representation from MDP (e.g. the latent from an
         #   autoencoder)
         state = mdp.state_representation(obs)
+
+        # fig, ax = plt.subplots(1, 3)
+        # ax[0].imshow(state[0], cmap='gray')
+        # ax[1].imshow(state[1])
+        # ax[2].imshow(state[2])
+        # plt.show()
 
         # Select action
         if train:
@@ -116,7 +123,9 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
         obs = copy.deepcopy(next_obs)
 
         if terminal_id > 0:
-            break
+            obs = env.update_target(obs, mdp.goal_pos)
+            terminal_id = 0
+            # break
 
         print('-----------------')
 
@@ -125,6 +134,19 @@ def run_episode(env, agent, mdp, max_steps=50, train=False, seed=0, goal=True, p
 
 def her_singulation(mdp, agent, observations, actions):
     print('Replay with HER')
+
+    goal_id = 0
+    for i in range(1, len(observations)):
+        if mdp.terminal(observations[i-1], observations[i]) > 0:
+            goal_id = i - 1
+            break
+        else:
+            goal_id = i
+
+    fused_map = mdp.state_representation(observations[goal_id])[1]
+    target_ids = np.argwhere(fused_map == 255)
+    pxl = np.mean(target_ids, axis=0)
+    mdp.set_goal(np.array([pxl[1], pxl[0]]), observations[goal_id])
 
     # for i in range(len(observations)):
     #
@@ -145,20 +167,20 @@ def her_singulation(mdp, agent, observations, actions):
     # if i == len(observations) - 1:
     #     return 0
 
-    fused_map = mdp.state_representation(observations[-1])[1]
-    target_ids = np.argwhere(fused_map == 255)
-    if len(target_ids) == 0:  # fallen
-        return 0
+    # fused_map = mdp.state_representation(observations[-1])[1]
+    # target_ids = np.argwhere(fused_map == 255)
+    # if len(target_ids) == 0:  # fallen
+    #     return 0
+    #
+    # pxl = np.mean(target_ids, axis=0)
+    # mdp.set_goal(np.array([pxl[1], pxl[0]]), observations[-1])
+    # i = len(observations) - 1
 
-    pxl = np.mean(target_ids, axis=0)
-    mdp.set_goal(np.array([pxl[1], pxl[0]]), observations[-1])
-    i = len(observations) - 1
-
-    number_of_updates = 0
-    for j in range(1, i+1):
+    for j in range(1, goal_id+1):
         if empty_push(observations[j - 1], observations[j], eps=0.03):
             continue
 
+        print('replay ', j)
         state = mdp.state_representation(observations[j - 1])
         next_state = mdp.state_representation(observations[j])
         reward = mdp.reward(observations[j - 1], observations[j], actions[j - 1])
@@ -170,8 +192,43 @@ def her_singulation(mdp, agent, observations, actions):
                                 terminal=bool(terminal))
 
         agent.learn(transition)
-        number_of_updates += 1
-    print('NO_OF_UPDATES:', number_of_updates)
+
+
+def her_singulation_2(mdp, agent, observations, actions):
+    print('Replay with HER')
+
+    goal_id = 0
+    for i in range(1, len(observations)):
+        if mdp.terminal(observations[i-1], observations[i]) > 0:
+            goal_id = i - 1
+            break
+        else:
+            goal_id = i
+
+    fused_map = mdp.state_representation(observations[goal_id])[1]
+    target_pts = np.argwhere(fused_map == 255)
+
+    target_ids = np.arange(1, len(target_pts))
+    goal_pos_id = np.random.choice(target_ids)
+    pxl = target_pts[goal_pos_id]
+    mdp.set_goal_with_known_radius(np.array([pxl[1], pxl[0]]), observations[goal_id])
+
+    for j in range(1, goal_id+1):
+        if empty_push(observations[j - 1], observations[j], eps=0.03):
+            continue
+
+        print('replay ', j)
+        state = mdp.state_representation(observations[j - 1])
+        next_state = mdp.state_representation(observations[j])
+        reward = mdp.reward(observations[j - 1], observations[j], actions[j - 1])
+        terminal = mdp.terminal(observations[j - 1], observations[j])
+        transition = Transition(state=state,
+                                next_state=next_state,
+                                action=actions[j - 1],
+                                reward=reward,
+                                terminal=bool(terminal))
+
+        agent.learn(transition)
 
 
 def train(env, agent, mdp, logger, rng, start_from=0, n_episodes=10000, episode_max_steps=50,
@@ -187,8 +244,8 @@ def train(env, agent, mdp, logger, rng, start_from=0, n_episodes=10000, episode_
                                                           seed=episode_seed, goal=goal)
         train_data.append(episode_data)
 
-        if her:
-            her_singulation(mdp, agent, observations, actions)
+        # if her:
+        #     her_singulation_2(mdp, agent, observations, actions)
 
         logger.update()
         logger.log_data(train_data, 'train_data')
@@ -203,17 +260,24 @@ def evaluate(env, agent, mdp, logger, n_episodes=10000, episode_max_steps=50, ex
     rng = np.random.RandomState()
     rng.seed(seed)
 
+    print('Exp name:{}, Session Seed', exp_name, seed)
+
+    tmp_success = 0
     for i in range(n_episodes):
         print('---- (Eval) Episode {} ----'.format(i))
         episode_seed = rng.randint(0, pow(2, 32) - 1)
-        print('Exp name:', exp_name)
-        print('Session Seed: ', seed, 'Episode seed:', episode_seed)
+        # episode_seed = 4005303368
+        print('Episode seed:', episode_seed)
         episode_data, _, _ = run_episode(env, agent, mdp, episode_max_steps, train=False, seed=episode_seed, goal=goal)
         eval_data.append(episode_data)
         print('--------------------')
 
         logger.update()
         logger.log_data(eval_data, 'eval_data')
+
+        if episode_data[-1]['terminal_class'] == 2:
+            tmp_success += 1
+        print('{}.success rate:{}'.format(i, tmp_success / (i + 1)))
 
     successes, actions = 0, 0
     for episode in eval_data:
@@ -277,6 +341,9 @@ def eval_all(args):
     def enable_print():
         sys.stdout = sys.__stdout__
 
+    def sort_function(e):
+        return int(e.split('.')[0].split('_')[-1])
+
     train_dir = '../logs/train_' + args.exp_name
     with open(os.path.join(train_dir, 'params.yml'), 'r') as stream:
         params = yaml.safe_load(stream)
@@ -286,7 +353,8 @@ def eval_all(args):
 
     env = BulletEnv(params=params['env'])
 
-    mdp = PushEverywhereEval(params)
+    # mdp = PushEverywhereEval(params)
+    mdp = PushEverywhere(params)
     mdp.seed(args.seed)
     mdp.random_goal = True
     # if args.policy == 'g-hybrid':
@@ -298,8 +366,12 @@ def eval_all(args):
     current_models = []
     while True:
         while True:
-            sub_folders = next(os.walk(train_dir))[1]
-            sub_folders.sort()
+            sub_folders = []
+            for sub_folder in os.listdir(train_dir):
+                if 'model' in sub_folder:
+                    sub_folders.append(sub_folder)
+            sub_folders.sort(key=sort_function, reverse=True)
+            # sub_folders = sub_folders[::2]
             for sub_folder in sub_folders:
                 if sub_folder.split('_')[0] == 'model':
                     if int(sub_folder.split('_')[-1]) in previous_models:
@@ -314,15 +386,16 @@ def eval_all(args):
 
         previous_models = current_models.copy()
 
+        print('Evaluating {} model...'.format(current_models[-1]))
         success_rates = []
         actions = []
         agent = QFCN.load(log_dir=os.path.join(train_dir, 'model_' + str(current_models[-1])))
         agent.eval_mode = True
 
-        block_print()
+        # block_print()
         success_rate, mean_actions = evaluate(env, agent, mdp, logger, n_episodes=100,
-                                              episode_max_steps=10, seed=args.seed)
-        enable_print()
+                                              episode_max_steps=100, seed=args.seed)
+        # enable_print()
         print('Model {}: {}, {}'.format(current_models[-1], success_rate, mean_actions))
 
         success_rates.append(success_rate)
@@ -334,23 +407,30 @@ def eval_all(args):
 
 def test(args):
     walls = False
+    randomize_pos = True
+
     if args.env == 1:
-        nr_obstacles = [8, 13]
+        nr_obstacles = [10, 15]
+        randomize_pos = True
     elif args.env == 2:
-        nr_obstacles = [15, 20]
-    if args.env == 3:
+        nr_obstacles = [20, 25]
+        randomize_pos = True
+    elif args.env == 3:
         nr_obstacles = [5, 10]
         walls = True
+        randomize_pos = False
     else:
-        pass
+        nr_obstacles = [5, 10]
 
     with open('../yaml/params.yml', 'r') as stream:
         params = yaml.safe_load(stream)
 
-    params['env']['workspace']['walls'] = walls
-    params['env']['scene_generation']['nr_of_obstacles'] = nr_obstacles
+    # params['env']['workspace']['walls'] = walls
+    # params['env']['scene_generation']['nr_of_obstacles'] = nr_obstacles
+    # params['env']['scene_generation']['target']['randomize_pos'] = randomize_pos
 
-    logger = Logger(args.policy + '_env' + str(args.env))
+    # logger = Logger(args.policy + '_env' + str(args.env))
+    logger = Logger('tmp')
     logger.log_yml(params, 'params')
     params['agent']['log_dir'] = logger.log_dir
 
@@ -364,7 +444,8 @@ def test(args):
             local = False
         agent = HeuristicPushTarget(local=local, plot=False)
     else:
-        mdp = PushEverywhereEval(params)
+        # mdp = PushEverywhereEval(params)
+        mdp = PushEverywhere(params)
         mdp.seed(args.seed)
         mdp.random_goal = False
         if args.policy == 'g-hybrid':
@@ -375,7 +456,7 @@ def test(args):
         agent = QFCN.load(log_dir=os.path.join(args.snapshot_file))
         agent.eval_mode = True
 
-    if env == 4:
+    if args.env == 4:
         evaluate_challenging(env, agent, mdp, logger, args.episode_max_steps)
     else:
         evaluate(env, agent, mdp, logger, args.test_trials, args.episode_max_steps, seed=args.seed, goal=args.goal)
@@ -384,8 +465,8 @@ def test(args):
 def run(args):
     if args.is_testing:
         test(args)
-
     else:
+        print('Training phase....')
         with open('../yaml/params.yml', 'r') as stream:
             params = yaml.safe_load(stream)
 
@@ -393,6 +474,7 @@ def run(args):
             params['env']['workspace']['walls'] = True
             params['env']['scene_generation']['nr_of_obstacles'] = [5, 10]
 
+        print(args.resume_model)
         if args.resume_model is not None:
             train_dir = '../logs/train_' + args.exp_name
             with open(os.path.join(train_dir, 'params.yml'), 'r') as stream:
@@ -401,7 +483,7 @@ def run(args):
             logger = Logger('train_' + args.exp_name, reply_='p')
             params['agent']['log_dir'] = logger.log_dir
         else:
-            logger = Logger('train_' + args.exp_name)
+            logger = Logger('../logs/train_' + args.exp_name)
             logger.log_yml(params, 'params')
 
         params['agent']['log_dir'] = logger.log_dir
@@ -422,14 +504,20 @@ def run(args):
             rng.seed(args.seed + args.resume_model)
             start_from = args.resume_model + 1
         else:
-            params['goal'] = args.goal
+            params['agent']['goal'] = args.goal
             qfcn = QFCN(params['agent'])
             qfcn.seed(args.seed)
             rng.seed(args.seed)
             start_from = 0
 
-        train(env, qfcn, mdp, logger, rng, start_from, args.n_episodes, args.episode_max_steps,
-              args.exp_name, args.seed, args.save_every, her, args.goal)
+        train(env, qfcn, mdp, logger, rng, start_from,
+              n_episodes=args.n_episodes,
+              episode_max_steps=args.episode_max_steps,
+              exp_name=args.exp_name,
+              seed=args.seed,
+              save_every=args.save_every,
+              her=her,
+              goal=args.goal)
 
 
 def parse_args():
@@ -444,7 +532,7 @@ def parse_args():
     parser.add_argument('--exp_name', default='hybrid', type=str, help='Name of experiment to run')
     parser.add_argument('--goal', dest='goal', action='store_true', default=False)
     parser.add_argument('--n_episodes', default=10000, type=int, help='Number of episodes to run for')
-    parser.add_argument('--resume_model', default='None', type=str, help='Path for the model to resume training')
+    parser.add_argument('--resume_model', default=None, type=str, help='Path for the model to resume training')
     parser.add_argument('--save_every', default=100, type=int, help='Number of episodes to save the model')
 
     # -------------- Testing options --------------
@@ -455,31 +543,22 @@ def parse_args():
     parser.add_argument('--snapshot_file', default='', type=str, help='The path to the model to be evaluated')
     parser.add_argument('--test_trials', default=1000, type=int, help='Number of episodes to evaluate for')
 
+    parser.add_argument('--eval_all', default=False, type=bool, help='Evaluate all models')
+
     args = parser.parse_args()
     return args
 
 
 if __name__ == '__main__':
     args = parse_args()
-    run(args)
-    #
-    # seed = 0
-    # eval_seed = 1
-    #
-    # # hrl.plot_fcn_prob(scenes_dir='../logs/pushing_transitions_v2_simple',
-    # #                         log_path='../logs/fcn_weights')
-    # hrl.train_goal_oriented(seed=seed, exp_name='hybrid-her-env1')
-    # # hrl.eval_goal_oriented(seed=eval_seed, exp_name='hybrid-env1', model=3800)
-    #
-    # # hrl.resume_train(seed=seed, exp_name='toy_blocks_random_goal_hugging', model=5700)
-    # # heuristic.eval_heuristic(seed=eval_seed, exp_name='toyblocks_heuristic_global', n_episodes=1000, local=False)
-    # # hrl.collect_goal_oriented_hrl(seed=100, exp_name='collected_data_goal_oriented_hrl')
-    #
-    # # analyze.analyze_eval_results({'hrl': {'path':'/home/marios/Projects/clutter/logs'
-    # #                                              '/Env4/RL'}})
-    #
-    # # hrl.eval_all(seed=100, exp_name='toy_blocks_random_goal_hugging')
-    # # hrl.plot_results(dirs=['eval_toy_blocks_random_goal_hugging_all_3'])
-    #
-    # # analyze.analyze_actions(env_dir='../logs/Env4')
 
+    if args.eval_all:
+        eval_all(args)
+    else:
+        run(args)
+
+    exps = {'L-hybrid': {}, 'G-hybrid': {}, 'RL': {}}
+    exps['L-hybrid']['path'] = '../logs/l-hybrid_env1'
+    exps['G-hybrid']['path'] = '../logs/g-hybrid_env1'
+    exps['RL']['path'] = '../logs/rl_env1'
+    analyze.analyze_eval_results(exps)
